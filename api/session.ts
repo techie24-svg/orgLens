@@ -1,6 +1,6 @@
 // GET /api/session — report whether an org is connected, without leaking the token.
 
-import { getSession } from "./_lib/session";
+import { getSession } from "./_lib/session.js";
 
 export default function handler(req: any, res: any) {
   const s = getSession(req);

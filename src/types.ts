@@ -123,4 +123,6 @@ export interface OrgSnapshot {
     lists?: string[];
     metrics?: string[];
   };
+  /** Live-scan API failures (status + endpoint + message), for troubleshooting. */
+  _diagnostics?: string[];
 }

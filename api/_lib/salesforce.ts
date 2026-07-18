@@ -12,6 +12,9 @@ interface QueryResult<T> {
 }
 
 class SfClient {
+  /** Human-readable record of every failed API call, surfaced for troubleshooting. */
+  readonly diagnostics: string[] = [];
+
   constructor(private instanceUrl: string, private token: string) {}
 
   private async get(path: string): Promise<any> {
@@ -20,6 +23,8 @@ class SfClient {
     });
     if (!res.ok) {
       const text = await res.text();
+      const short = path.split("?")[0];
+      this.diagnostics.push(`${res.status} ${short}: ${text.slice(0, 200)}`);
       throw new Error(`SF ${res.status} ${path}: ${text.slice(0, 300)}`);
     }
     return res.json();
@@ -132,17 +137,24 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
   } catch { /* leave zero */ }
   try {
     const risks = await sf.toolingQuery<any>(
-      "SELECT SettingGroup, SettingName, Setting, OrgValue FROM SecurityHealthCheckRisks"
+      "SELECT SettingGroup, Setting, OrgValue FROM SecurityHealthCheckRisks"
     );
+    let matched = 0;
+    const unmatched: string[] = [];
     for (const r of risks.records) {
-      const id = `${r.SettingGroup}.${r.SettingName ?? r.Setting}`;
+      const id = `${r.SettingGroup}.${r.Setting}`;
       const m = HEALTHCHECK_MAP[id];
-      if (!m) continue;
+      if (!m) { if (unmatched.length < 8) unmatched.push(id); continue; }
+      matched++;
       const raw = r.OrgValue;
       settings[m.key] = m.type === "bool" ? String(raw) === "true" || raw === true : Number(raw);
       const i = unavailable.settings.indexOf(m.key);
       if (i !== -1) unavailable.settings.splice(i, 1);
     }
+    sf.diagnostics.push(
+      `healthcheck: ${risks.records.length} risk rows, ${matched} mapped` +
+      (matched === 0 && unmatched.length ? ` — unmatched ids e.g. ${unmatched.join(", ")}` : "")
+    );
   } catch { /* health-check-derived settings stay unavailable */ }
 
   // ── Permission counts (distinct active assignees per system permission) ─────
@@ -150,10 +162,12 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     Object.entries(PERMISSION_FIELDS).map(async ([metric, field]) => {
       try {
         const res = await sf.query<any>(
-          `SELECT Assignee.Username name FROM PermissionSetAssignment ` +
+          `SELECT Assignee.Username FROM PermissionSetAssignment ` +
           `WHERE PermissionSet.${field} = true AND Assignee.IsActive = true`
         );
-        const names = Array.from(new Set(res.records.map((x: any) => x.name).filter(Boolean)));
+        const names = Array.from(
+          new Set(res.records.map((x: any) => x.Assignee?.Username).filter(Boolean))
+        );
         permissionCounts[metric] = names.length;
         permissionAffected[metric] = names as string[];
       } catch {
@@ -175,5 +189,6 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     healthCheckScore,
     totalActiveUsers,
     unavailable,
+    _diagnostics: sf.diagnostics,
   };
 }
