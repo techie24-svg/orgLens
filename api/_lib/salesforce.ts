@@ -3,7 +3,32 @@
 // (missing permission, unsupported field, edition difference) degrades the
 // affected checks to "Not Evaluated" instead of a misleading pass.
 
+import { readMetadata, flatten } from "./metadata.js";
+
 const API_VERSION = "v60.0";
+
+// SecuritySettings (Metadata API) flattened-path → rule setting key. These are
+// org config toggles that Health Check / SOQL do not expose.
+const MD_SECURITY_BOOL: Record<string, string> = {
+  "sessionSettings.enableClickjackSetup": "malware.clickjackSetup",
+  "sessionSettings.enableClickjackNonsetupSFDC": "malware.clickjackNonSetup",
+  "sessionSettings.enableClickjackNonsetupUser": "malware.clickjackVfStandard",
+  "sessionSettings.enableClickjackNonsetupUserHeaderless": "malware.clickjackVfDisabledHeaders",
+  "sessionSettings.enableCSRFOnGet": "malware.csrfGet",
+  "sessionSettings.enableCSRFOnPost": "malware.csrfPost",
+  "sessionSettings.enableContentSniffingProtection": "malware.contentSniffing",
+  "sessionSettings.forceLogoutOnSessionTimeout": "access.forceLogoutOnTimeout",
+  "sessionSettings.enforceIpRangesEveryRequest": "access.ipEveryRequest",
+  "sessionSettings.redirectionWarning": "access.warnRedirect",
+  "sessionSettings.identityConfirmationOnTwoFactorRegistrationEnabled": "mfa.verifyOnRegistration",
+  "passwordPolicies.minimumPasswordLifetime": "pwd.minLifetime",
+};
+const MD_SECURITY_NUM: Record<string, string> = {
+  "passwordPolicies.minimumPasswordLength": "pwd.minLength",
+  "passwordPolicies.historyRestriction": "pwd.history",
+  "passwordPolicies.maxLoginAttempts": "access.maxInvalidLoginAttempts",
+  "passwordPolicies.expiration": "pwd.expirationDays",
+};
 
 interface QueryResult<T> {
   totalSize: number;
@@ -74,6 +99,11 @@ const HEALTHCHECK_MATCHERS: HcMatcher[] = [
   { key: "pwd.minLifetime", group: "PasswordPolicies", all: ["password lifetime"], type: "bool" },
 ];
 
+function removeFrom(list: string[], value: string): void {
+  const i = list.indexOf(value);
+  if (i !== -1) list.splice(i, 1);
+}
+
 function hcBool(raw: unknown): boolean {
   const s = String(raw).trim().toLowerCase();
   return s === "true" || s === "1" || s === "enabled" || s === "yes" || s === "on";
@@ -85,6 +115,18 @@ function hcNum(raw: unknown): number {
   if (/no limit|never|none|not enforced|disabled/.test(s)) return 0;
   const m = s.match(/-?\d+/);
   return m ? Number(m[0]) : 0;
+}
+
+/**
+ * Metadata numeric fields are often enums ("Never", "TenAttempts", "NinetyDays").
+ * Map "off"-style values to 0; spelled-out enums that mean "a limit is set" to a
+ * nonzero sentinel; plain integers to their value.
+ */
+function mdNum(raw: unknown): number {
+  const s = String(raw).trim().toLowerCase();
+  if (!s || /no ?limit|never|none|not ?enforced|zero/.test(s)) return 0;
+  const m = s.match(/\d+/);
+  return m ? Number(m[0]) : 1;
 }
 
 // Rule check-keys we know we cannot populate from the read APIs above; these are
@@ -179,6 +221,45 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     );
   } catch { /* health-check-derived settings stay unavailable */ }
 
+  // ── Metadata API: org security/session/file-upload toggles ──────────────────
+  try {
+    const sec = await readMetadata(instanceUrl, token, "SecuritySettings", "Security");
+    if (sec) {
+      const flat = flatten(sec);
+      let mapped = 0;
+      for (const [path, key] of Object.entries(MD_SECURITY_BOOL)) {
+        if (flat[path] !== undefined) { settings[key] = hcBool(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
+      }
+      for (const [path, key] of Object.entries(MD_SECURITY_NUM)) {
+        if (flat[path] !== undefined) { settings[key] = mdNum(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
+      }
+      // Surface security-relevant keys we don't yet map (e.g. COEP/COOP/CSP), to
+      // guide follow-up mapping without another blind guess.
+      const hints = Object.keys(flat)
+        .filter((k) => /coep|coop|cross|csp|referrer|sniff|redirect|mfa|sso|https|httponly/i.test(k))
+        .slice(0, 14);
+      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} mapped; security keys: ${hints.join(", ") || "none"}`);
+    }
+  } catch (e: any) {
+    sf.diagnostics.push(e?.message ?? "Metadata SecuritySettings read failed");
+  }
+
+  // HTML-file-upload behavior lives in a separate settings type.
+  try {
+    const fu = await readMetadata(instanceUrl, token, "FileUploadAndDownloadSecuritySettings", "FileUploadAndDownloadSecurity");
+    const raw = fu?.dispositions;
+    const dispositions: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    if (dispositions.length) {
+      const html = dispositions.find((d) => /html/i.test(String(d?.securityRiskFileType ?? "")));
+      if (html) {
+        settings["malware.htmlUploadBlocked"] = String(html.behavior).toUpperCase() === "DOWNLOAD";
+        removeFrom(unavailable.settings, "malware.htmlUploadBlocked");
+      }
+    }
+  } catch (e: any) {
+    sf.diagnostics.push(e?.message ?? "Metadata FileUpload read failed");
+  }
+
   // ── Permission counts (distinct active assignees per system permission) ─────
   await Promise.all(
     Object.entries(PERMISSION_FIELDS).map(async ([metric, field]) => {
@@ -198,6 +279,27 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     })
   );
 
+  // ── Public file links / content deliveries missing a password (SOQL) ────────
+  const publicLinksNoPassword: string[] = [];
+  try {
+    const cd = await sf.query<any>(
+      "SELECT Name FROM ContentDistribution WHERE PreferencesPasswordRequired = false LIMIT 200"
+    );
+    for (const r of cd.records) publicLinksNoPassword.push(r.Name ?? "(unnamed delivery)");
+    removeFrom(unavailable.lists, "publicLinksNoPassword");
+  } catch { /* stays unavailable → Not Evaluated */ }
+
+  // ── Objects whose external org-wide default is Public (Tooling) ─────────────
+  const objectsPublicExternal: string[] = [];
+  try {
+    const ed = await sf.toolingQuery<any>(
+      "SELECT QualifiedApiName, ExternalSharingModel FROM EntityDefinition " +
+      "WHERE ExternalSharingModel IN ('Read','ReadWrite','FullAccess') LIMIT 500"
+    );
+    for (const r of ed.records) objectsPublicExternal.push(r.QualifiedApiName);
+    removeFrom(unavailable.lists, "objectsPublicExternal");
+  } catch { /* stays unavailable → Not Evaluated */ }
+
   return {
     org,
     settings,
@@ -205,8 +307,8 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     permissionCounts,
     permissionAffected,
     connectedApps: [],
-    publicLinksNoPassword: [],
-    objectsPublicExternal: [],
+    publicLinksNoPassword,
+    objectsPublicExternal,
     guestSharingRules: [],
     healthCheckScore,
     totalActiveUsers,
