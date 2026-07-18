@@ -74,6 +74,11 @@ const HEALTHCHECK_MATCHERS: HcMatcher[] = [
   { key: "pwd.minLifetime", group: "PasswordPolicies", all: ["password lifetime"], type: "bool" },
 ];
 
+function removeFrom(list: string[], value: string): void {
+  const i = list.indexOf(value);
+  if (i !== -1) list.splice(i, 1);
+}
+
 function hcBool(raw: unknown): boolean {
   const s = String(raw).trim().toLowerCase();
   return s === "true" || s === "1" || s === "enabled" || s === "yes" || s === "on";
@@ -198,6 +203,27 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     })
   );
 
+  // ── Public file links / content deliveries missing a password (SOQL) ────────
+  const publicLinksNoPassword: string[] = [];
+  try {
+    const cd = await sf.query<any>(
+      "SELECT Name FROM ContentDistribution WHERE PreferencesPasswordRequired = false LIMIT 200"
+    );
+    for (const r of cd.records) publicLinksNoPassword.push(r.Name ?? "(unnamed delivery)");
+    removeFrom(unavailable.lists, "publicLinksNoPassword");
+  } catch { /* stays unavailable → Not Evaluated */ }
+
+  // ── Objects whose external org-wide default is Public (Tooling) ─────────────
+  const objectsPublicExternal: string[] = [];
+  try {
+    const ed = await sf.toolingQuery<any>(
+      "SELECT QualifiedApiName, ExternalSharingModel FROM EntityDefinition " +
+      "WHERE ExternalSharingModel IN ('Read','ReadWrite','FullAccess') LIMIT 500"
+    );
+    for (const r of ed.records) objectsPublicExternal.push(r.QualifiedApiName);
+    removeFrom(unavailable.lists, "objectsPublicExternal");
+  } catch { /* stays unavailable → Not Evaluated */ }
+
   return {
     org,
     settings,
@@ -205,8 +231,8 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     permissionCounts,
     permissionAffected,
     connectedApps: [],
-    publicLinksNoPassword: [],
-    objectsPublicExternal: [],
+    publicLinksNoPassword,
+    objectsPublicExternal,
     guestSharingRules: [],
     healthCheckScore,
     totalActiveUsers,
