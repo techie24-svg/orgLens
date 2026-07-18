@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OrgLens_Scanner — least-privilege, READ-ONLY permission set assigned to the
+  integration user the scanner connects as. Grants only the visibility required to
+  read configuration, users, permissions, and audit data. It deliberately excludes
+  every write/modify permission (no ModifyAllData, no ModifyMetadata), so the tool
+  can never alter the org it audits.
+
+  Deploy with:  sf project deploy start -d salesforce -o <org>
+-->
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>OrgLens Scanner (Read-Only)</label>
+    <description>Read-only access for the OrgLens security posture scanner. No write permissions.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+
+    <userPermissions><enabled>true</enabled><name>ViewHealthCheck</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewSetup</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewAllUsers</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewAllProfiles</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewRoles</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewEventLogFiles</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewDataLeakageEvents</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewAllCustomSettings</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewPublicReports</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ViewPublicDashboards</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ApiEnabled</name></userPermissions>
+    <userPermissions><enabled>true</enabled><name>ManageCertificates</name></userPermissions>
+</PermissionSet>

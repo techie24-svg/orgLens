@@ -1,16 +1,101 @@
-# OrgSentinel (working name)
+# OrgLens — Salesforce Security Posture Scanner
 
-An external, agentless **Security Posture Management (SSPM) scanner for Salesforce** —
-a self-owned equivalent of CrowdStrike Falcon Shield's Salesforce SSPM, with a custom,
-extensible rule catalog and branded compliance exports.
+A self-owned, agentless **SaaS Security Posture Management (SSPM)** tool for Salesforce —
+a customizable equivalent of CrowdStrike Falcon Shield's Salesforce module. OrgLens
+connects to any org via OAuth (like Workbench), runs a declarative catalog of security
+checks against the org's live configuration, scores posture, maps every finding to six
+compliance frameworks, and exports a Falcon-Shield-parity report.
 
-Connect to any org via OAuth (like Workbench) → run a rule catalog you own → score
-posture → map findings to compliance frameworks → export the report → track drift.
+## Highlights
 
-## Status: design phase (no app built yet)
+- **49 built-in checks** across 9 domains (Access Control, Permissions, Data Leakage,
+  Malware Protection, Password Management, MFA, Secure Baseline, Auditing, Privacy),
+  seeded from a real Falcon Shield report.
+- **Declarative rule engine** — three check kinds (`setting`, `count`, `listEmpty`).
+  Add your own checks as JSON in the UI; they're evaluated live, no code change.
+- **Six compliance frameworks** — ISO 27001:2022, NIST 800-53 Rev.5, SOC 2 Type 2,
+  CSA CCM, PCI-DSS 4.0, NIST CSF 2.0 — with per-control failing-clause rollups.
+- **Drift detection** — flags checks whose status changed since the last scan.
+- **27-column CSV export** matching the reference report schema exactly (drop-in).
+- **Least-privilege by design** — ships a read-only permission set; never writes to the org.
 
-- [`DESIGN.md`](./DESIGN.md) — architecture, connection/OAuth model, rule engine, export, roadmap.
-- [`CHECK_CATALOG.md`](./CHECK_CATALOG.md) — the check catalog mapped to Salesforce APIs + compliance frameworks.
+## Architecture
 
-Design decisions locked so far: external web app · Health Check API first · JSON/YAML
-custom rules.
+```
+React + TS UI  ──►  Rule engine  ──►  data source
+ (dashboard,        (evaluate         ├─ MockProvider  (bundled sample org, demo)
+  findings,          catalog vs       └─ /api/*  serverless backend (live)
+  compliance,        snapshot)             OAuth token exchange + Health Check /
+  rule editor)                             Tooling / SOQL — tokens stay server-side
+```
+
+Like Workbench, OrgLens is a **hosted web app**: you OAuth into any org and all
+token exchange + Salesforce API calls happen server-side (a Connected App secret and
+the access token must never reach the browser). On Vercel these run as serverless
+functions; locally they run under `vercel dev`, so localhost and production behave
+identically.
+
+- `src/rules/catalog.ts` — the built-in declarative check catalog.
+- `src/lib/engine.ts` — evaluator (setting / count / listEmpty) + drift diff; honors
+  `unavailable` data so checks a live scan can't retrieve show **Not Evaluated** (never a false pass).
+- `src/lib/api.ts` — frontend client for the backend (`session`, `scan`, OAuth start, logout).
+- `src/lib/report.ts` — 27-column Falcon-Shield-parity CSV exporter.
+- `api/oauth/{start,callback}.ts` — OAuth 2.0 web-server flow **with PKCE**.
+- `api/{session,scan,logout}.ts` — session status, live scan, disconnect.
+- `api/_lib/` — encrypted-cookie session, OAuth helpers, Salesforce snapshot assembler.
+- `salesforce/` — deployable read-only scanner permission set metadata.
+
+The demo runs against a bundled sample org (`src/data/sampleOrg.ts`) that mirrors the
+shape returned by a live connection, so the full scan → findings → export flow works
+offline without any Salesforce credentials.
+
+## Run
+
+```bash
+npm install
+
+# Demo only (sample org, no backend):
+npm run dev            # http://localhost:5174 → "Try demo (sample org)"
+
+# Full app incl. live OAuth (recommended — mirrors production):
+npm i -g vercel
+cp .env.example .env   # fill in SF_CLIENT_ID / SF_CLIENT_SECRET / SESSION_SECRET
+vercel dev             # http://localhost:3000
+
+npm run build          # type-check + production build
+```
+
+## Connect a real org (OAuth, like Workbench)
+
+1. In Salesforce: **Setup → App Manager → New Connected App**. Enable OAuth, set the
+   callback URL to `http://localhost:3000/api/oauth/callback` (local) and
+   `https://<your-app>.vercel.app/api/oauth/callback` (prod), request scopes
+   `api refresh_token web`, and enable **Require PKCE**.
+2. Put the app's Consumer Key/Secret and a random `SESSION_SECRET` in `.env` (see `.env.example`).
+3. Assign the read-only `OrgLens Scanner` permission set (below) to the connecting user.
+4. **Connections → Connect real org via OAuth** → authorize → live scan runs automatically.
+
+## Deploy to Vercel
+
+```bash
+vercel            # link + deploy (Vite auto-detected; api/ becomes functions)
+```
+
+Then in the Vercel project: add env vars `SF_CLIENT_ID`, `SF_CLIENT_SECRET`,
+`SESSION_SECRET`, and add the production callback URL to the Connected App. No
+`vercel.json` is required.
+
+## Deploy the scanner permission set
+
+```bash
+sf project deploy start -d salesforce -o <yourOrg>
+```
+
+Assign `OrgLens Scanner (Read-Only)` to the integration user the tool connects as.
+
+## Docs
+
+- `DESIGN.md` — full architecture and rule-engine spec.
+- `CHECK_CATALOG.md` — catalog of checks mapped to Salesforce APIs and frameworks.
+- `FALCON_SHIELD_REFERENCE.md` — Falcon Shield capability map and scoping decisions.
+- `SUBMISSION.md` — challenge submission writeup.
