@@ -236,15 +236,25 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       for (const [path, key] of Object.entries(MD_SECURITY_NUM)) {
         if (flat[path] !== undefined) { settings[key] = mdNum(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
       }
-      // Surface security-relevant keys we don't yet map (e.g. COEP/COOP/CSP), to
-      // guide follow-up mapping without another blind guess.
-      const hints = Object.keys(flat)
-        .filter((k) => /coep|coop|cross|csp|referrer|sniff|redirect|mfa|sso|https|httponly/i.test(k))
-        .slice(0, 14);
-      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} mapped; security keys: ${hints.join(", ") || "none"}`);
+      // Dump the full field inventory (unmapped keys) so remaining checks can be
+      // mapped precisely in one pass rather than guessed at.
+      const mappedPaths = new Set([...Object.keys(MD_SECURITY_BOOL), ...Object.keys(MD_SECURITY_NUM)]);
+      const keys = Object.keys(flat).filter((k) => !mappedPaths.has(k)).sort();
+      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} mapped; unmapped keys (${keys.length}): ${keys.join(", ")}`);
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata SecuritySettings read failed");
+  }
+
+  // My Domain enforcement toggles (separate settings type) — dump keys to map next.
+  try {
+    const md = await readMetadata(instanceUrl, token, "MyDomainSettings", "MyDomain");
+    if (md) {
+      const flat = flatten(md);
+      sf.diagnostics.push(`metadata MyDomainSettings keys: ${Object.keys(flat).sort().join(", ") || "none"}`);
+    }
+  } catch (e: any) {
+    sf.diagnostics.push(e?.message ?? "Metadata MyDomainSettings read failed");
   }
 
   // HTML-file-upload behavior lives in a separate settings type.
