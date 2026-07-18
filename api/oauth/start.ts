@@ -3,8 +3,8 @@
 // cookie and redirects the browser to the Salesforce authorize screen.
 
 import crypto from "node:crypto";
-import { buildAuthorizeUrl, normalizeLoginHost, pkcePair, readOAuthEnv, resolveRedirectUri } from "../_lib/oauth";
-import { setOAuthState } from "../_lib/session";
+import { buildAuthorizeUrl, normalizeLoginHost, pkcePair, readOAuthEnv, resolveRedirectUri } from "../_lib/oauth.js";
+import { setOAuthState } from "../_lib/session.js";
 
 export default function handler(req: any, res: any) {
   try {

@@ -3,8 +3,8 @@
 // the code (+ PKCE verifier) for a token server-side, store it in an encrypted
 // session cookie, and bounce back to the app.
 
-import { exchangeCodeForToken, readOAuthEnv } from "../_lib/oauth";
-import { clearOAuthState, getOAuthState, setSession } from "../_lib/session";
+import { exchangeCodeForToken, readOAuthEnv } from "../_lib/oauth.js";
+import { clearOAuthState, getOAuthState, setSession } from "../_lib/session.js";
 
 function redirect(res: any, to: string) {
   res.statusCode = 302;

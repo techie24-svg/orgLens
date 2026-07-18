@@ -1,8 +1,8 @@
 // GET /api/scan — run a live posture scan against the connected org and return
 // a normalized OrgSnapshot (the same shape the MockProvider produces).
 
-import { assembleSnapshot } from "./_lib/salesforce";
-import { getSession } from "./_lib/session";
+import { assembleSnapshot } from "./_lib/salesforce.js";
+import { getSession } from "./_lib/session.js";
 
 export default async function handler(req: any, res: any) {
   const s = getSession(req);
