@@ -89,7 +89,17 @@ export function Connections({ store, onScanned }: { store: Store; onScanned: () 
           <div className="kv"><span className="k">Domain</span><span className="mono">{store.instanceHost ?? store.snapshot.org.orgDomain}</span></div>
           <div className="kv"><span className="k">Type</span><span>{store.snapshot.org.instanceType}</span></div>
           <div className="kv"><span className="k">Active users</span><span>{store.snapshot.totalActiveUsers}</span></div>
+          <div className="kv"><span className="k">Health Check score</span><span>{store.snapshot.healthCheckScore}</span></div>
           <div className="kv"><span className="k">Checks run</span><span>{store.findings.length}</span></div>
+          {store.mode === "live" && store.snapshot._diagnostics && store.snapshot._diagnostics.length > 0 && (
+            <>
+              <div className="divider" />
+              <div className="lbl" style={{ marginBottom: 6 }}>API calls that failed ({store.snapshot._diagnostics.length})</div>
+              <div className="banner error" style={{ display: "block", whiteSpace: "pre-wrap", fontSize: 12, lineHeight: 1.5 }}>
+                {store.snapshot._diagnostics.join("\n")}
+              </div>
+            </>
+          )}
           {store.mode === "live" && (
             <>
               <div className="divider" />
