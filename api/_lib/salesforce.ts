@@ -17,9 +17,12 @@ const MD_SECURITY_BOOL: Record<string, string> = {
   "sessionSettings.enableCSRFOnGet": "malware.csrfGet",
   "sessionSettings.enableCSRFOnPost": "malware.csrfPost",
   "sessionSettings.enableContentSniffingProtection": "malware.contentSniffing",
+  "sessionSettings.enableCoepHeader": "malware.coep",
+  "sessionSettings.enableCoopHeader": "malware.coop",
   "sessionSettings.forceLogoutOnSessionTimeout": "access.forceLogoutOnTimeout",
   "sessionSettings.enforceIpRangesEveryRequest": "access.ipEveryRequest",
-  "sessionSettings.redirectionWarning": "access.warnRedirect",
+  "sessionSettings.redirectBlockModeEnabled": "access.warnRedirect",
+  "sessionSettings.enableMFADirectUILoginOptIn": "mfa.allDirectUiLogins",
   "sessionSettings.identityConfirmationOnTwoFactorRegistrationEnabled": "mfa.verifyOnRegistration",
   "passwordPolicies.minimumPasswordLifetime": "pwd.minLifetime",
 };
