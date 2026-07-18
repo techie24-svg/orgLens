@@ -68,6 +68,11 @@ export function Connections({ store, onScanned }: { store: Store; onScanned: () 
           Connecting redirects you to Salesforce to authorize a read-only Connected App, then runs a live scan.
           Requires the app's OAuth credentials to be configured (see README).
         </div>
+        {store.deployedCommit && (
+          <div className="muted mono" style={{ fontSize: 11, marginTop: 8 }}>
+            build {store.deployedCommit}
+          </div>
+        )}
       </Card>
 
       <Card title="Least-privilege access" sub="The scanner is assigned this read-only permission set — it can never modify the org.">

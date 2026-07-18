@@ -23,6 +23,7 @@ export interface Store {
   hydrating: boolean;
   error: string | null;
   instanceHost: string | null;
+  deployedCommit: string | null;
   snapshot: OrgSnapshot | null;
   findings: Finding[];
   rules: Rule[];
@@ -48,6 +49,7 @@ export function useStore(): Store {
   const [hydrating, setHydrating] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [instanceHost, setInstanceHost] = useState<string | null>(null);
+  const [deployedCommit, setDeployedCommit] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<OrgSnapshot | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [customRules, setCustomRules] = useState<Rule[]>([]);
@@ -102,6 +104,7 @@ export function useStore(): Store {
     }
     (async () => {
       const session = await getSession();
+      setDeployedCommit(session.deployedCommit ?? null);
       if (session.connected) {
         setInstanceHost(session.instanceHost ?? null);
         await runLiveScan();
@@ -160,7 +163,7 @@ export function useStore(): Store {
   );
 
   return {
-    connected, mode, scanning, hydrating, error, instanceHost, snapshot, findings, rules, lastRun, disabledIds,
+    connected, mode, scanning, hydrating, error, instanceHost, deployedCommit, snapshot, findings, rules, lastRun, disabledIds,
     runDemo, connectLive, rescan, disconnect, addCustomRule, removeCustomRule, toggleRule,
   };
 }

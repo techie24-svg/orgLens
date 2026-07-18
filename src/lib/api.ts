@@ -8,6 +8,8 @@ export interface SessionInfo {
   connected: boolean;
   instanceHost?: string;
   issuedAt?: number;
+  /** Short commit SHA of the deployed backend build (or "local"). */
+  deployedCommit?: string;
 }
 
 export async function getSession(): Promise<SessionInfo> {
