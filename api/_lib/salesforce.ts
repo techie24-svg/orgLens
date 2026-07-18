@@ -21,10 +21,17 @@ const MD_SECURITY_BOOL: Record<string, string> = {
   "sessionSettings.enableCoopHeader": "malware.coop",
   "sessionSettings.forceLogoutOnSessionTimeout": "access.forceLogoutOnTimeout",
   "sessionSettings.enforceIpRangesEveryRequest": "access.ipEveryRequest",
-  "sessionSettings.redirectBlockModeEnabled": "access.warnRedirect",
+  "sessionSettings.redirectionWarning": "access.warnRedirect",
   "sessionSettings.enableMFADirectUILoginOptIn": "mfa.allDirectUiLogins",
   "sessionSettings.identityConfirmationOnTwoFactorRegistrationEnabled": "mfa.verifyOnRegistration",
+  "singleSignOnSettings.enableSamlLogin": "access.ssoEnabled",
   "passwordPolicies.minimumPasswordLifetime": "pwd.minLifetime",
+};
+
+// MyDomainSettings (Metadata API) field → rule setting key.
+const MD_MYDOMAIN_BOOL: Record<string, string> = {
+  canOnlyLoginWithMyDomainUrl: "access.enforceCustomDomain",
+  doesApiLoginRequireOrgDomain: "access.requireMyDomainForApi",
 };
 const MD_SECURITY_NUM: Record<string, string> = {
   "passwordPolicies.minimumPasswordLength": "pwd.minLength",
@@ -236,22 +243,22 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       for (const [path, key] of Object.entries(MD_SECURITY_NUM)) {
         if (flat[path] !== undefined) { settings[key] = mdNum(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
       }
-      // Dump the full field inventory (unmapped keys) so remaining checks can be
-      // mapped precisely in one pass rather than guessed at.
-      const mappedPaths = new Set([...Object.keys(MD_SECURITY_BOOL), ...Object.keys(MD_SECURITY_NUM)]);
-      const keys = Object.keys(flat).filter((k) => !mappedPaths.has(k)).sort();
-      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} mapped; unmapped keys (${keys.length}): ${keys.join(", ")}`);
+      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} settings mapped`);
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata SecuritySettings read failed");
   }
 
-  // My Domain enforcement toggles (separate settings type) — dump keys to map next.
+  // My Domain enforcement toggles (separate settings type).
   try {
     const md = await readMetadata(instanceUrl, token, "MyDomainSettings", "MyDomain");
     if (md) {
       const flat = flatten(md);
-      sf.diagnostics.push(`metadata MyDomainSettings keys: ${Object.keys(flat).sort().join(", ") || "none"}`);
+      let mapped = 0;
+      for (const [path, key] of Object.entries(MD_MYDOMAIN_BOOL)) {
+        if (flat[path] !== undefined) { settings[key] = hcBool(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
+      }
+      sf.diagnostics.push(`metadata MyDomainSettings: ${mapped} settings mapped`);
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata MyDomainSettings read failed");
