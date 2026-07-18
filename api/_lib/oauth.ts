@@ -72,6 +72,30 @@ export interface TokenResponse {
   id: string;
   token_type: string;
   issued_at: string;
+  refresh_token?: string;
+}
+
+/** Exchange a refresh token for a fresh access token (Salesforce refresh grant). */
+export async function refreshAccessToken(opts: {
+  loginHost: string;
+  refreshToken: string;
+  clientId: string;
+  clientSecret: string;
+}): Promise<{ access_token: string; instance_url?: string }> {
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: opts.refreshToken,
+    client_id: opts.clientId,
+    client_secret: opts.clientSecret,
+  });
+  const res = await fetch(`${opts.loginHost}/services/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Refresh failed (${res.status}): ${text.slice(0, 200)}`);
+  return JSON.parse(text);
 }
 
 export async function exchangeCodeForToken(opts: {

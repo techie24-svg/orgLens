@@ -39,6 +39,8 @@ export default async function handler(req: any, res: any) {
       accessToken: token.access_token,
       instanceUrl: token.instance_url,
       identityUrl: token.id,
+      refreshToken: token.refresh_token,
+      loginHost: saved.loginHost,
       issuedAt: Date.now(),
     });
     redirect(res, "/?connected=1");

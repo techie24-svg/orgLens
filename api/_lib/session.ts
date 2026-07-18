@@ -14,6 +14,10 @@ export interface Session {
   instanceUrl: string;
   /** OAuth identity URL of the authenticated user. */
   identityUrl?: string;
+  /** Long-lived refresh token, used to mint a fresh access token per scan. */
+  refreshToken?: string;
+  /** Login host used at authorization (needed for the refresh grant). */
+  loginHost?: string;
   issuedAt: number;
 }
 
