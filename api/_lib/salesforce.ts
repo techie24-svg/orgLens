@@ -48,24 +48,44 @@ const PERMISSION_FIELDS: Record<string, string> = {
   ManageUsers: "PermissionsManageUsers",
   BulkApiHardDelete: "PermissionsBulkApiHardDelete",
   WeeklyDataExport: "PermissionsDataExport",
-  InstallConnectedApps: "PermissionsInstallMultiforce",
+  // NOTE: "Install Connected Apps" has no clean, queryable PermissionSet column
+  // (PermissionsInstallMultiforce does not exist on modern orgs), so it is left
+  // in UNAVAILABLE.metrics → reported "Not Evaluated" rather than crashing.
 };
 
-// Health Check risk rows expose (SettingGroup, SettingName, SettingValue).
-// Map those identifiers to the flat snapshot.settings keys the rules read.
-const HEALTHCHECK_MAP: Record<string, { key: string; type: "bool" | "num" }> = {
-  "SessionSettings.enableClickjackProtectionSetupPages": { key: "malware.clickjackSetup", type: "bool" },
-  "SessionSettings.enableClickjackProtectionNonSetupPages": { key: "malware.clickjackNonSetup", type: "bool" },
-  "SessionSettings.enableCSRFOnGet": { key: "malware.csrfGet", type: "bool" },
-  "SessionSettings.enableCSRFOnPost": { key: "malware.csrfPost", type: "bool" },
-  "SessionSettings.forceLogoutOnSessionTimeout": { key: "access.forceLogoutOnTimeout", type: "bool" },
-  "SessionSettings.enforceIpRangesEveryRequest": { key: "access.ipEveryRequest", type: "bool" },
-  "PasswordPolicies.passwordExpiration": { key: "pwd.expirationDays", type: "num" },
-  "PasswordPolicies.minimumPasswordLength": { key: "pwd.minLength", type: "num" },
-  "PasswordPolicies.enforcePasswordHistory": { key: "pwd.history", type: "num" },
-  "PasswordPolicies.minimumPasswordLifetime": { key: "pwd.minLifetime", type: "bool" },
-  "PasswordPolicies.maxLoginAttempts": { key: "access.maxInvalidLoginAttempts", type: "num" },
-};
+// SecurityHealthCheckRisks.Setting is a localized *display label*, not an API
+// name, and SettingGroup is the section. We match on those labels (lowercased,
+// substring) to the flat snapshot.settings keys the rules read. `not` fragments
+// disambiguate near-duplicate labels (e.g. Setup vs non-Setup vs Visualforce).
+type HcMatcher = { key: string; group: string; all: string[]; not?: string[]; type: "bool" | "num" };
+const HEALTHCHECK_MATCHERS: HcMatcher[] = [
+  { key: "malware.clickjackSetup", group: "SessionSettings", all: ["clickjack", "setup pages"], not: ["non-setup", "visualforce"], type: "bool" },
+  { key: "malware.clickjackNonSetup", group: "SessionSettings", all: ["clickjack", "non-setup"], type: "bool" },
+  { key: "malware.clickjackVfStandard", group: "SessionSettings", all: ["clickjack", "visualforce", "standard headers"], type: "bool" },
+  { key: "malware.clickjackVfDisabledHeaders", group: "SessionSettings", all: ["clickjack", "visualforce", "headers disabled"], type: "bool" },
+  { key: "malware.csrfGet", group: "SessionSettings", all: ["csrf", "get request"], type: "bool" },
+  { key: "malware.csrfPost", group: "SessionSettings", all: ["csrf", "post request"], type: "bool" },
+  { key: "access.forceLogoutOnTimeout", group: "SessionSettings", all: ["force logout"], type: "bool" },
+  { key: "access.ipEveryRequest", group: "SessionSettings", all: ["login ip ranges on every request"], type: "bool" },
+  { key: "access.maxInvalidLoginAttempts", group: "PasswordPolicies", all: ["maximum invalid login attempts"], type: "num" },
+  { key: "pwd.expirationDays", group: "PasswordPolicies", all: ["passwords expire"], type: "num" },
+  { key: "pwd.minLength", group: "PasswordPolicies", all: ["minimum password length"], type: "num" },
+  { key: "pwd.history", group: "PasswordPolicies", all: ["password history"], type: "num" },
+  { key: "pwd.minLifetime", group: "PasswordPolicies", all: ["password lifetime"], type: "bool" },
+];
+
+function hcBool(raw: unknown): boolean {
+  const s = String(raw).trim().toLowerCase();
+  return s === "true" || s === "1" || s === "enabled" || s === "yes" || s === "on";
+}
+
+/** Health Check numeric OrgValues are display strings ("90 days", "No limit"). */
+function hcNum(raw: unknown): number {
+  const s = String(raw).trim().toLowerCase();
+  if (/no limit|never|none|not enforced|disabled/.test(s)) return 0;
+  const m = s.match(/-?\d+/);
+  return m ? Number(m[0]) : 0;
+}
 
 // Rule check-keys we know we cannot populate from the read APIs above; these are
 // surfaced to the engine as unavailable so they render Not Evaluated.
@@ -84,7 +104,7 @@ const UNAVAILABLE = {
     "oauthFullScopeApps", "connectedAppsIpRelax", "connectedAppsNonExpiring",
     "objectsPublicExternal", "publicLinksNoPassword", "guestSharingRules",
   ] as string[],
-  metrics: ["DeleteAccounts", "ViewPII"] as string[],
+  metrics: ["DeleteAccounts", "ViewPII", "InstallConnectedApps"] as string[],
 };
 
 export async function assembleSnapshot(instanceUrl: string, token: string): Promise<any> {
@@ -142,18 +162,20 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     let matched = 0;
     const unmatched: string[] = [];
     for (const r of risks.records) {
-      const id = `${r.SettingGroup}.${r.Setting}`;
-      const m = HEALTHCHECK_MAP[id];
-      if (!m) { if (unmatched.length < 8) unmatched.push(id); continue; }
+      const group = String(r.SettingGroup ?? "");
+      const label = String(r.Setting ?? "").toLowerCase();
+      const m = HEALTHCHECK_MATCHERS.find(
+        (x) => x.group === group && x.all.every((k) => label.includes(k)) && !x.not?.some((k) => label.includes(k))
+      );
+      if (!m) { if (unmatched.length < 12) unmatched.push(`${group}.${r.Setting}`); continue; }
       matched++;
-      const raw = r.OrgValue;
-      settings[m.key] = m.type === "bool" ? String(raw) === "true" || raw === true : Number(raw);
+      settings[m.key] = m.type === "bool" ? hcBool(r.OrgValue) : hcNum(r.OrgValue);
       const i = unavailable.settings.indexOf(m.key);
       if (i !== -1) unavailable.settings.splice(i, 1);
     }
     sf.diagnostics.push(
       `healthcheck: ${risks.records.length} risk rows, ${matched} mapped` +
-      (matched === 0 && unmatched.length ? ` — unmatched ids e.g. ${unmatched.join(", ")}` : "")
+      (matched < HEALTHCHECK_MATCHERS.length && unmatched.length ? ` — still unmatched e.g. ${unmatched.join(" | ")}` : "")
     );
   } catch { /* health-check-derived settings stay unavailable */ }
 
