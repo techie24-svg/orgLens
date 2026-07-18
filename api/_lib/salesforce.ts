@@ -3,7 +3,7 @@
 // (missing permission, unsupported field, edition difference) degrades the
 // affected checks to "Not Evaluated" instead of a misleading pass.
 
-import { readMetadata, flatten } from "./metadata.js";
+import { readMetadata, readMetadataMany, listMetadata, flatten } from "./metadata.js";
 
 const API_VERSION = "v60.0";
 
@@ -262,6 +262,28 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata MyDomainSettings read failed");
+  }
+
+  // Remote Site Settings: every active site must use HTTPS (no relaxed protocol).
+  try {
+    const names = await listMetadata(instanceUrl, token, "RemoteSiteSetting");
+    if (names.length === 0) {
+      settings["access.remoteSitesAllHttps"] = true; // none defined → vacuously compliant
+      removeFrom(unavailable.settings, "access.remoteSitesAllHttps");
+    } else {
+      const recs: any[] = [];
+      for (let i = 0; i < names.length && i < 60; i += 10) {
+        recs.push(...(await readMetadataMany(instanceUrl, token, "RemoteSiteSetting", names.slice(i, i + 10))));
+      }
+      const insecure = recs.filter(
+        (r) => String(r?.isActive) === "true" &&
+          (String(r?.url ?? "").toLowerCase().startsWith("http://") || String(r?.disableProtocolSecurity) === "true")
+      );
+      settings["access.remoteSitesAllHttps"] = insecure.length === 0;
+      removeFrom(unavailable.settings, "access.remoteSitesAllHttps");
+    }
+  } catch (e: any) {
+    sf.diagnostics.push(e?.message ?? "Metadata RemoteSiteSetting read failed");
   }
 
   // HTML-file-upload behavior lives in a separate settings type.
