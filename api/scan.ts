@@ -47,7 +47,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const snapshot = await assembleSnapshot(instanceUrl, accessToken);
-    if (refreshNote) (snapshot._diagnostics ??= []).unshift(refreshNote);
+    if (refreshNote) (snapshot._coverage ??= []).unshift(refreshNote);
     res.end(JSON.stringify(snapshot));
   } catch (e: any) {
     res.statusCode = 502;
