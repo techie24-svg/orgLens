@@ -123,6 +123,8 @@ export interface OrgSnapshot {
     lists?: string[];
     metrics?: string[];
   };
+  /** Informational "what the scan read" lines (successful coverage, not errors). */
+  _coverage?: string[];
   /** Live-scan API failures (status + endpoint + message), for troubleshooting. */
   _diagnostics?: string[];
 }

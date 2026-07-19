@@ -96,6 +96,15 @@ export function Connections({ store, onScanned }: { store: Store; onScanned: () 
           <div className="kv"><span className="k">Active users</span><span>{store.snapshot.totalActiveUsers}</span></div>
           <div className="kv"><span className="k">Health Check score</span><span>{store.snapshot.healthCheckScore}</span></div>
           <div className="kv"><span className="k">Checks run</span><span>{store.findings.length}</span></div>
+          {store.mode === "live" && store.snapshot._coverage && store.snapshot._coverage.length > 0 && (
+            <>
+              <div className="divider" />
+              <div className="lbl" style={{ marginBottom: 6 }}>Scan coverage</div>
+              <div className="banner" style={{ display: "block", whiteSpace: "pre-wrap", fontSize: 12, lineHeight: 1.5 }}>
+                {store.snapshot._coverage.join("\n")}
+              </div>
+            </>
+          )}
           {store.mode === "live" && store.snapshot._diagnostics && store.snapshot._diagnostics.length > 0 && (
             <>
               <div className="divider" />

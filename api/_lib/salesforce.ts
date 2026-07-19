@@ -84,9 +84,6 @@ const PERMISSION_FIELDS: Record<string, string> = {
   BulkApiHardDelete: "PermissionsBulkApiHardDelete",
   WeeklyDataExport: "PermissionsDataExport",
   ViewPII: "PermissionsViewEncryptedData",
-  // NOTE: "Install Connected Apps" has no clean, queryable PermissionSet column
-  // (PermissionsInstallMultiforce does not exist on modern orgs), so it is left
-  // in UNAVAILABLE.metrics → reported "Not Evaluated" rather than crashing.
 };
 
 // SecurityHealthCheckRisks.Setting is a localized *display label*, not an API
@@ -154,6 +151,7 @@ async function mapBoolSettings(
   boolMap: Record<string, string>,
   settings: Record<string, boolean | number | string>,
   unavailable: { settings: string[] },
+  coverage: string[],
   diagnostics: string[]
 ): Promise<Record<string, string> | null> {
   try {
@@ -168,7 +166,7 @@ async function mapBoolSettings(
         mapped++;
       }
     }
-    diagnostics.push(`metadata ${type}: ${mapped}/${Object.keys(boolMap).length} settings mapped`);
+    coverage.push(`${type}: ${mapped}/${Object.keys(boolMap).length} settings read`);
     return flat;
   } catch (e: any) {
     diagnostics.push(e?.message ?? `Metadata ${type} read failed`);
@@ -183,17 +181,13 @@ const UNAVAILABLE = {
     "malware.clickjackVfStandard", "malware.clickjackVfDisabledHeaders", "malware.coep",
     "malware.coop", "malware.contentSniffing", "malware.htmlUploadBlocked",
     "access.remoteSitesAllHttps", "access.ssoEnabled", "access.enforceCustomDomain",
-    "access.connectedAppAllowlist", "access.warnRedirect", "access.requireMyDomainForApi",
+    "access.warnRedirect", "access.requireMyDomainForApi",
     "mfa.allDirectUiLogins", "mfa.verifyOnRegistration", "dlp.dashboardSnapshots",
-    "dlp.publicLinksEnabled", "dlp.contentDeliveryPasswordDefault", "baseline.pimEnhanced",
-    "baseline.guestApiEnabled", "baseline.profileFiltering", "baseline.canvasNonAdminInstall",
-    "audit.eventLogGeneration", "audit.eventLogDeleteDisabled", "privacy.scramblePersonalData",
+    "baseline.pimEnhanced", "baseline.guestApiEnabled", "baseline.profileFiltering",
+    "audit.eventLogGeneration", "audit.eventLogDeleteDisabled",
   ] as string[],
-  lists: [
-    "oauthFullScopeApps", "connectedAppsIpRelax", "connectedAppsNonExpiring",
-    "objectsPublicExternal", "publicLinksNoPassword", "guestSharingRules",
-  ] as string[],
-  metrics: ["DeleteAccounts", "ViewPII", "InstallConnectedApps"] as string[],
+  lists: ["objectsPublicExternal", "publicLinksNoPassword"] as string[],
+  metrics: ["DeleteAccounts", "ViewPII"] as string[],
 };
 
 export async function assembleSnapshot(instanceUrl: string, token: string): Promise<any> {
@@ -201,6 +195,9 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
   const settings: Record<string, boolean | number | string> = {};
   const permissionCounts: Record<string, number> = {};
   const permissionAffected: Record<string, string[]> = {};
+  // Informational "what we read" lines, kept separate from sf.diagnostics (which
+  // holds only real API failures) so the UI never labels successes as errors.
+  const coverage: string[] = [];
   const unavailable = {
     settings: [...UNAVAILABLE.settings],
     lists: [...UNAVAILABLE.lists],
@@ -249,23 +246,19 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       "SELECT SettingGroup, Setting, OrgValue FROM SecurityHealthCheckRisks"
     );
     let matched = 0;
-    const unmatched: string[] = [];
     for (const r of risks.records) {
       const group = String(r.SettingGroup ?? "");
       const label = String(r.Setting ?? "").toLowerCase();
       const m = HEALTHCHECK_MATCHERS.find(
         (x) => x.group === group && x.all.every((k) => label.includes(k)) && !x.not?.some((k) => label.includes(k))
       );
-      if (!m) { if (unmatched.length < 12) unmatched.push(`${group}.${r.Setting}`); continue; }
+      if (!m) continue;
       matched++;
       settings[m.key] = m.type === "bool" ? hcBool(r.OrgValue) : hcNum(r.OrgValue);
       const i = unavailable.settings.indexOf(m.key);
       if (i !== -1) unavailable.settings.splice(i, 1);
     }
-    sf.diagnostics.push(
-      `healthcheck: ${risks.records.length} risk rows, ${matched} mapped` +
-      (matched < HEALTHCHECK_MATCHERS.length && unmatched.length ? ` — still unmatched e.g. ${unmatched.join(" | ")}` : "")
-    );
+    coverage.push(`Health Check: ${risks.records.length} risk rows, ${matched} mapped`);
   } catch { /* health-check-derived settings stay unavailable */ }
 
   // ── Metadata API: org security/session/file-upload toggles ──────────────────
@@ -280,7 +273,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       for (const [path, key] of Object.entries(MD_SECURITY_NUM)) {
         if (flat[path] !== undefined) { settings[key] = mdNum(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
       }
-      sf.diagnostics.push(`metadata SecuritySettings: ${mapped} settings mapped`);
+      coverage.push(`SecuritySettings: ${mapped} settings read`);
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata SecuritySettings read failed");
@@ -295,7 +288,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       for (const [path, key] of Object.entries(MD_MYDOMAIN_BOOL)) {
         if (flat[path] !== undefined) { settings[key] = hcBool(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
       }
-      sf.diagnostics.push(`metadata MyDomainSettings: ${mapped} settings mapped`);
+      coverage.push(`MyDomainSettings: ${mapped} settings read`);
     }
   } catch (e: any) {
     sf.diagnostics.push(e?.message ?? "Metadata MyDomainSettings read failed");
@@ -379,7 +372,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
   await mapBoolSettings(
     instanceUrl, token, "AnalyticsSettings", "Analytics",
     { enableDashboardComponentSnapshot: "dlp.dashboardSnapshots" },
-    settings, unavailable, sf.diagnostics
+    settings, unavailable, coverage, sf.diagnostics
   );
 
   // ── User management: Enhanced PIM + guest profile filtering ─────────────────
@@ -389,7 +382,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       enableEnhancedConcealPersonalInfo: "baseline.pimEnhanced",
       enableProfileFiltering: "baseline.profileFiltering",
     },
-    settings, unavailable, sf.diagnostics
+    settings, unavailable, coverage, sf.diagnostics
   );
 
   // ── Event Monitoring: log generation + audit-record deletion ────────────────
@@ -399,7 +392,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     const ev = await mapBoolSettings(
       instanceUrl, token, "EventSettings", "Event",
       { enableEventLogGeneration: "audit.eventLogGeneration" },
-      settings, unavailable, sf.diagnostics
+      settings, unavailable, coverage, sf.diagnostics
     );
     if (ev && ev["enableDeleteMonitoringData"] !== undefined) {
       settings["audit.eventLogDeleteDisabled"] = !hcBool(ev["enableDeleteMonitoringData"]);
@@ -451,6 +444,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     healthCheckScore,
     totalActiveUsers,
     unavailable,
+    _coverage: coverage,
     _diagnostics: sf.diagnostics,
   };
 }
