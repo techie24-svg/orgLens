@@ -75,14 +75,15 @@ class SfClient {
 }
 
 // System-permission checks that map cleanly to a PermissionSet boolean field.
-// (Object-level permissions like Account delete are intentionally omitted —
-// they require an ObjectPermissions join and are left Not Evaluated for now.)
+// (Object-level permissions like Account delete are handled separately below via
+// an ObjectPermissions semi-join, not this simple boolean-field pattern.)
 const PERMISSION_FIELDS: Record<string, string> = {
   ViewAllData: "PermissionsViewAllData",
   ModifyAllData: "PermissionsModifyAllData",
   ManageUsers: "PermissionsManageUsers",
   BulkApiHardDelete: "PermissionsBulkApiHardDelete",
   WeeklyDataExport: "PermissionsDataExport",
+  ViewPII: "PermissionsViewEncryptedData",
   // NOTE: "Install Connected Apps" has no clean, queryable PermissionSet column
   // (PermissionsInstallMultiforce does not exist on modern orgs), so it is left
   // in UNAVAILABLE.metrics → reported "Not Evaluated" rather than crashing.
@@ -137,6 +138,42 @@ function mdNum(raw: unknown): number {
   if (!s || /no ?limit|never|none|not ?enforced|zero/.test(s)) return 0;
   const m = s.match(/\d+/);
   return m ? Number(m[0]) : 1;
+}
+
+/**
+ * Read one org-settings metadata type (member = type name without the "Settings"
+ * suffix, e.g. "Analytics" for AnalyticsSettings) and map its boolean fields to
+ * rule setting keys. Returns the flattened record so callers can post-process
+ * fields that need custom logic (e.g. negation). Never throws.
+ */
+async function mapBoolSettings(
+  instanceUrl: string,
+  token: string,
+  type: string,
+  member: string,
+  boolMap: Record<string, string>,
+  settings: Record<string, boolean | number | string>,
+  unavailable: { settings: string[] },
+  diagnostics: string[]
+): Promise<Record<string, string> | null> {
+  try {
+    const rec = await readMetadata(instanceUrl, token, type, member);
+    if (!rec) return null;
+    const flat = flatten(rec);
+    let mapped = 0;
+    for (const [path, key] of Object.entries(boolMap)) {
+      if (flat[path] !== undefined) {
+        settings[key] = hcBool(flat[path]);
+        removeFrom(unavailable.settings, key);
+        mapped++;
+      }
+    }
+    diagnostics.push(`metadata ${type}: ${mapped}/${Object.keys(boolMap).length} settings mapped`);
+    return flat;
+  } catch (e: any) {
+    diagnostics.push(e?.message ?? `Metadata ${type} read failed`);
+    return null;
+  }
 }
 
 // Rule check-keys we know we cannot populate from the read APIs above; these are
@@ -320,6 +357,65 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       }
     })
   );
+
+  // ── Object-level: users who can delete Accounts (ObjectPermissions join) ────
+  // Delete is granted on the object, not as a system permission, so we semi-join
+  // permission sets that grant Account delete to their active assignees.
+  try {
+    const res = await sf.query<any>(
+      "SELECT Assignee.Username FROM PermissionSetAssignment " +
+      "WHERE Assignee.IsActive = true AND PermissionSetId IN " +
+      "(SELECT ParentId FROM ObjectPermissions WHERE SobjectType = 'Account' AND PermissionsDelete = true)"
+    );
+    const names = Array.from(
+      new Set(res.records.map((x: any) => x.Assignee?.Username).filter(Boolean))
+    );
+    permissionCounts["DeleteAccounts"] = names.length;
+    permissionAffected["DeleteAccounts"] = names as string[];
+    removeFrom(unavailable.metrics, "DeleteAccounts");
+  } catch { /* stays Not Evaluated */ }
+
+  // ── Dashboard component snapshots (Reports & Dashboards) ────────────────────
+  await mapBoolSettings(
+    instanceUrl, token, "AnalyticsSettings", "Analytics",
+    { enableDashboardComponentSnapshot: "dlp.dashboardSnapshots" },
+    settings, unavailable, sf.diagnostics
+  );
+
+  // ── User management: Enhanced PIM + guest profile filtering ─────────────────
+  await mapBoolSettings(
+    instanceUrl, token, "UserManagementSettings", "UserManagement",
+    {
+      enableEnhancedConcealPersonalInfo: "baseline.pimEnhanced",
+      enableProfileFiltering: "baseline.profileFiltering",
+    },
+    settings, unavailable, sf.diagnostics
+  );
+
+  // ── Event Monitoring: log generation + audit-record deletion ────────────────
+  // enableEventLogGeneration → generation on. enableDeleteMonitoringData means
+  // deletion is *allowed*, so the "deletion disabled" check is its negation.
+  {
+    const ev = await mapBoolSettings(
+      instanceUrl, token, "EventSettings", "Event",
+      { enableEventLogGeneration: "audit.eventLogGeneration" },
+      settings, unavailable, sf.diagnostics
+    );
+    if (ev && ev["enableDeleteMonitoringData"] !== undefined) {
+      settings["audit.eventLogDeleteDisabled"] = !hcBool(ev["enableDeleteMonitoringData"]);
+      removeFrom(unavailable.settings, "audit.eventLogDeleteDisabled");
+    }
+  }
+
+  // ── Guest profiles with 'API Enabled' (unauthenticated programmatic access) ──
+  try {
+    const gp = await sf.query<any>(
+      "SELECT Profile.Name FROM PermissionSet " +
+      "WHERE IsOwnedByProfile = true AND PermissionsApiEnabled = true AND Profile.UserType = 'Guest'"
+    );
+    settings["baseline.guestApiEnabled"] = gp.records.length > 0;
+    removeFrom(unavailable.settings, "baseline.guestApiEnabled");
+  } catch { /* Profile.UserType unsupported here → Not Evaluated */ }
 
   // ── Public file links / content deliveries missing a password (SOQL) ────────
   const publicLinksNoPassword: string[] = [];
