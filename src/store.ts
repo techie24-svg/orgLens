@@ -60,7 +60,11 @@ export function useStore(): Store {
 
   const recompute = useCallback((snap: OrgSnapshot, ruleset: Rule[]) => {
     const previous = new Map<string, Status>(Object.entries(SEED_PREVIOUS));
-    setFindings(runScan(ruleset, snap, previous));
+    // Drop checks a scan can't evaluate (data a live org doesn't expose via read
+    // APIs) so the results list only ever shows real Passed/Failed outcomes.
+    // The mock/demo snapshot is fully populated, so nothing is filtered there.
+    const evaluated = runScan(ruleset, snap, previous).filter((f) => f.status !== "Not Evaluated");
+    setFindings(evaluated);
     setLastRun(todayLabel());
   }, []);
 
