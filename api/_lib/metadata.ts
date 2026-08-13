@@ -4,7 +4,7 @@
 
 import { XMLParser } from "fast-xml-parser";
 
-const API_VERSION = "60.0";
+const API_VERSION = "64.0";
 
 const parser = new XMLParser({
   ignoreAttributes: true,
@@ -111,6 +111,26 @@ export async function readMetadataMany(
   );
   const parsed = parser.parse(text);
   return asArray(parsed?.Envelope?.Body?.readMetadataResponse?.result?.records) as Record<string, any>[];
+}
+
+/**
+ * readMetadata across any number of fullNames by batching into the API's
+ * 10-per-call limit. Batches run sequentially to stay well inside org API limits;
+ * `cap` bounds the total read so a huge org cannot stall a scan.
+ */
+export async function readMetadataAll(
+  instanceUrl: string,
+  token: string,
+  type: string,
+  fullNames: string[],
+  cap = 200
+): Promise<Record<string, any>[]> {
+  const names = fullNames.slice(0, cap);
+  const out: Record<string, any>[] = [];
+  for (let i = 0; i < names.length; i += 10) {
+    out.push(...(await readMetadataMany(instanceUrl, token, type, names.slice(i, i + 10))));
+  }
+  return out;
 }
 
 /** Flatten a nested settings object into dotted paths (arrays are indexed). */

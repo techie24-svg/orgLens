@@ -75,17 +75,28 @@ export function Connections({ store, onScanned }: { store: Store; onScanned: () 
         )}
       </Card>
 
-      <Card title="Least-privilege access" sub="The scanner is assigned this read-only permission set — it can never modify the org.">
+      <Card title="Access and privileges" sub="A live scan runs as the user who authorizes it. Read-only by construction — every call is a query or a metadata read.">
         <div className="wrap">
-          {["ViewHealthCheck", "ViewSetup", "ViewAllUsers", "ViewAllProfiles", "ViewRoles", "ViewEventLogFiles", "ViewDataLeakageEvents", "ViewAllCustomSettings", "ApiEnabled"].map((p) => (
-            <span key={p} className="tag mono">{p}</span>
+          {[
+            "View Setup and Configuration",
+            "View All Users",
+            "Customize Application",
+            "View Event Log Files",
+            "View All Data",
+            "API Enabled",
+          ].map((p) => (
+            <span key={p} className="tag">{p}</span>
           ))}
         </div>
         <div className="divider" />
-        <div className="kv"><span className="k">Excluded</span><span style={{ color: "var(--pass)" }}>ModifyAllData, ModifyMetadata (never requested)</span></div>
+        <div className="kv">
+          <span className="k">For full coverage</span>
+          <span>Authorize as System Administrator — a user without the above sees those checks as Not Evaluated rather than a false pass.</span>
+        </div>
+        <div className="kv"><span className="k">Never used</span><span style={{ color: "var(--pass)" }}>No DML, no deploy, no metadata write</span></div>
         <div className="kv"><span className="k">Interactive</span><span>OAuth 2.0 web-server flow + PKCE</span></div>
         <div className="kv"><span className="k">Token storage</span><span>Encrypted httpOnly cookie (server-side)</span></div>
-        <div className="kv"><span className="k">Metadata source</span><span>Health Check · Tooling · SOQL</span></div>
+        <div className="kv"><span className="k">Sources</span><span>Health Check · Tooling · SOQL · Metadata API v64.0</span></div>
       </Card>
 
       {store.connected && store.snapshot && (

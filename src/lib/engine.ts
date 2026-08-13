@@ -23,6 +23,36 @@ function resolveList(snap: OrgSnapshot, key: string): string[] {
       return snap.connectedApps.filter((a) => a.ipRelaxation === "RELAX").map((a) => a.name);
     case "connectedAppsNonExpiring":
       return snap.connectedApps.filter((a) => a.usesNonExpiringRefreshTokens).map((a) => a.name);
+    case "connectedAppsNoPkce":
+      return snap.connectedApps.filter((a) => a.pkceRequired === false).map((a) => a.name);
+    case "connectedAppsClientCredentials":
+      return snap.connectedApps.filter((a) => a.clientCredentialsEnabled).map((a) => a.name);
+    case "connectedAppsPublicClient":
+      return snap.connectedApps.filter((a) => a.consumerSecretOptional).map((a) => a.name);
+    case "connectedAppsIntrospectAll":
+      return snap.connectedApps.filter((a) => a.introspectAllTokens).map((a) => a.name);
+    case "connectedAppsRefreshNoSecret":
+      return snap.connectedApps.filter((a) => a.secretRequiredForRefresh === false).map((a) => a.name);
+    case "connectedAppsUnrestricted":
+      return snap.connectedApps.filter((a) => a.restrictedToProfilesOrPermSets === false).map((a) => a.name);
+    case "connectedAppsNoSingleLogout":
+      return snap.connectedApps.filter((a) => !a.singleLogoutUrl).map((a) => a.name);
+    case "connectedAppsInsecureCallback":
+      return snap.connectedApps
+        .filter((a) => a.callbackUrl && /^http:\/\/(?!localhost|127\.0\.0\.1)/i.test(a.callbackUrl))
+        .map((a) => a.name);
+    case "certsExpired":
+      return snap.certificates.filter((c) => c.daysToExpiry !== null && c.daysToExpiry < 0).map((c) => c.name);
+    case "certsExpiringSoon":
+      return snap.certificates
+        .filter((c) => c.daysToExpiry !== null && c.daysToExpiry >= 0 && c.daysToExpiry <= 90)
+        .map((c) => c.name);
+    case "certsWeakKey":
+      return snap.certificates.filter((c) => c.keySize !== null && c.keySize < 2048).map((c) => c.name);
+    case "certsSelfSigned":
+      return snap.certificates.filter((c) => !c.caSigned).map((c) => c.name);
+    case "certsExportableKey":
+      return snap.certificates.filter((c) => c.privateKeyExportable).map((c) => c.name);
     case "objectsPublicExternal":
       return snap.objectsPublicExternal;
     case "publicLinksNoPassword":
