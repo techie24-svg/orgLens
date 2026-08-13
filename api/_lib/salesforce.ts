@@ -19,6 +19,10 @@ const MD_SECURITY_BOOL: Record<string, string> = {
   "sessionSettings.enableContentSniffingProtection": "malware.contentSniffing",
   "sessionSettings.enableCoepHeader": "malware.coep",
   "sessionSettings.enableCoopHeader": "malware.coop",
+  // Some orgs expose the cross-origin headers at the top level rather than under
+  // sessionSettings; both spellings map to the same check, whichever is present.
+  enableCoepHeader: "malware.coep",
+  enableCoopHeader: "malware.coop",
   "sessionSettings.forceLogoutOnSessionTimeout": "access.forceLogoutOnTimeout",
   "sessionSettings.enforceIpRangesEveryRequest": "access.ipEveryRequest",
   "sessionSettings.redirectionWarning": "access.warnRedirect",
@@ -26,12 +30,45 @@ const MD_SECURITY_BOOL: Record<string, string> = {
   "sessionSettings.identityConfirmationOnTwoFactorRegistrationEnabled": "mfa.verifyOnRegistration",
   "singleSignOnSettings.enableSamlLogin": "access.ssoEnabled",
   "passwordPolicies.minimumPasswordLifetime": "pwd.minLifetime",
+
+  // ── Additional org toggles already present in the SecuritySettings payload ──
+  enableRequireHttpsConnection: "access.requireHttpsConnection",
+  canUsersGrantLoginAccess: "access.usersGrantLoginAccess",
+  enableAdminLoginAsAnyUser: "access.adminLoginAsAnyUser",
+  enableCrossOrgRedirects: "baseline.crossOrgRedirects",
+  redirectBlockModeEnabled: "baseline.redirectBlockMode",
+  "sessionSettings.enableCacheAndAutocomplete": "access.cacheAndAutocomplete",
+  "sessionSettings.requireHttpOnly": "access.requireHttpOnly",
+  "sessionSettings.lockSessionsToDomain": "access.lockSessionsToDomain",
+  "sessionSettings.lockSessionsToIp": "access.lockSessionsToIp",
+  "sessionSettings.forceRelogin": "access.forceReloginAfterLoginAs",
+  "sessionSettings.terminateUserSessionsWhenAdminResetsPassword": "access.terminateSessionsOnPasswordReset",
+  "sessionSettings.identityConfirmationOnEmailChange": "access.identityConfirmOnEmailChange",
+  "sessionSettings.canConfirmEmailChangeInLightningCommunities": "access.emailChangeConfirmCommunities",
+  "sessionSettings.allowUserAuthenticationByCertificate": "access.certificateBasedAuth",
+  "sessionSettings.enablePostForSessions": "baseline.postForSessions",
+  "singleSignOnSettings.isLoginWithSalesforceCredentialsDisabled": "access.disableLoginWithSfCredentials",
+  "sessionSettings.enableU2F": "mfa.securityKeyU2F",
+  "sessionSettings.enableSMSIdentity": "mfa.smsIdentityVerification",
+  "sessionSettings.enableBuiltInAuthenticator": "mfa.builtInAuthenticator",
+  "sessionSettings.enableLightningLogin": "mfa.lightningLogin",
+  "passwordPolicies.obscureSecretAnswer": "pwd.obscureSecretAnswer",
+};
+
+// Enum-valued SecuritySettings fields kept as raw strings so rules can compare
+// them directly (e.g. complexity != "NoRestriction").
+const MD_SECURITY_STR: Record<string, string> = {
+  "passwordPolicies.complexity": "pwd.complexity",
+  "passwordPolicies.questionRestriction": "pwd.questionRestriction",
 };
 
 // MyDomainSettings (Metadata API) field → rule setting key.
 const MD_MYDOMAIN_BOOL: Record<string, string> = {
   canOnlyLoginWithMyDomainUrl: "access.enforceCustomDomain",
   doesApiLoginRequireOrgDomain: "access.requireMyDomainForApi",
+  use3rdPartyCookieBlockingCompatibleHostnames: "access.firstPartyCookies",
+  useStabilizedMyDomainHostnames: "access.stabilizedHostnames",
+  logRedirections: "access.logRedirections",
 };
 const MD_SECURITY_NUM: Record<string, string> = {
   "passwordPolicies.minimumPasswordLength": "pwd.minLength",
@@ -185,6 +222,20 @@ const UNAVAILABLE = {
     "mfa.allDirectUiLogins", "mfa.verifyOnRegistration", "dlp.dashboardSnapshots",
     "baseline.pimEnhanced", "baseline.guestApiEnabled", "baseline.profileFiltering",
     "audit.eventLogGeneration", "audit.eventLogDeleteDisabled",
+    // Session / login / password toggles read from the same settings payloads.
+    "access.requireHttpsConnection", "access.usersGrantLoginAccess",
+    "access.adminLoginAsAnyUser", "access.cacheAndAutocomplete",
+    "access.requireHttpOnly", "access.lockSessionsToDomain", "access.lockSessionsToIp",
+    "access.forceReloginAfterLoginAs", "access.terminateSessionsOnPasswordReset",
+    "access.identityConfirmOnEmailChange", "access.emailChangeConfirmCommunities",
+    "access.certificateBasedAuth", "access.disableLoginWithSfCredentials",
+    "access.firstPartyCookies", "access.stabilizedHostnames", "access.logRedirections",
+    "mfa.securityKeyU2F", "mfa.smsIdentityVerification", "mfa.builtInAuthenticator",
+    "mfa.lightningLogin",
+    "baseline.crossOrgRedirects", "baseline.redirectBlockMode", "baseline.postForSessions",
+    "baseline.userSelfDeactivate", "baseline.restrictEmailDomains",
+    "pwd.obscureSecretAnswer", "pwd.complexity", "pwd.questionRestriction",
+    "audit.userFieldHistory",
   ] as string[],
   lists: ["objectsPublicExternal", "publicLinksNoPassword"] as string[],
   metrics: ["DeleteAccounts", "ViewPII"] as string[],
@@ -272,6 +323,9 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
       }
       for (const [path, key] of Object.entries(MD_SECURITY_NUM)) {
         if (flat[path] !== undefined) { settings[key] = mdNum(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
+      }
+      for (const [path, key] of Object.entries(MD_SECURITY_STR)) {
+        if (flat[path] !== undefined) { settings[key] = String(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
       }
       coverage.push(`SecuritySettings: ${mapped} settings read`);
     }
@@ -381,6 +435,9 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     {
       enableEnhancedConcealPersonalInfo: "baseline.pimEnhanced",
       enableProfileFiltering: "baseline.profileFiltering",
+      enableUserSelfDeactivate: "baseline.userSelfDeactivate",
+      enableRestrictEmailDomains: "baseline.restrictEmailDomains",
+      userFieldHistoryTracking: "audit.userFieldHistory",
     },
     settings, unavailable, coverage, sf.diagnostics
   );
