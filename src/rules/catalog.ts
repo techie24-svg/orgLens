@@ -135,25 +135,6 @@ export const BUILTIN_RULES: Rule[] = [
     compliance: { ISO_27001_2022: ["A.8.5"], NIST_800_53: ["IA-2(10)"] },
   },
   {
-    id: "access.connected_app_allowlist", domain: "Access Control", severity: "High",
-    title: "Limit Connected Apps API Access (allowlist)",
-    description: "API access control is enabled so only allowlisted connected apps can call the API.",
-    info: "Without allowlisting, any authorized connected app can access the API with the user's permissions.",
-    remediation: "Setup > Connected Apps OAuth Usage / Manage Connected Apps: enable API access allowlisting.",
-    check: { source: "metadata", kind: "setting", path: "access.connectedAppAllowlist", op: "==", value: true },
-    compliance: { ISO_27001_2022: ["A.8.26"], NIST_800_53: ["AC-6(10)"] },
-  },
-  {
-    id: "access.oauth_full_scope", domain: "Access Control", severity: "High",
-    title: "OAuth Connected Apps With Full Access Scope",
-    description: "No connected app is granted the 'full' OAuth scope.",
-    info: "'full' scope grants an app all of the user's permissions — an oversized blast radius if the app or its secret is compromised.",
-    remediation: "Trim connected-app scopes to the minimum required; replace 'full' with specific scopes (api, refresh_token).",
-    check: { source: "soql", kind: "listEmpty", list: "oauthFullScopeApps" },
-    compliance: { ISO_27001_2022: ["A.8.3"], NIST_800_53: ["AC-6(10)"] },
-    tags: ["over-permissioning", "nhi"],
-  },
-  {
     id: "access.force_logout_timeout", domain: "Access Control", severity: "Medium",
     title: "Force Logout on Session Timeout",
     description: "Sessions are terminated (not just locked) at timeout.",
@@ -188,26 +169,6 @@ export const BUILTIN_RULES: Rule[] = [
     remediation: "Setup > My Domain: require My Domain hostnames for all API logins.",
     check: { source: "metadata", kind: "setting", path: "access.requireMyDomainForApi", op: "==", value: true },
     compliance: { ISO_27001_2022: ["A.8.5"], NIST_800_53: ["IA-2(10)"] },
-  },
-  {
-    id: "access.connected_app_ip", domain: "Access Control", severity: "High",
-    title: "Connected App IP Restriction Enforced",
-    description: "No connected app relaxes IP restrictions.",
-    info: "Relaxing IP restrictions lets an app's tokens be used from any network location.",
-    remediation: "For each connected app, set IP Relaxation to 'Enforce IP restrictions'.",
-    check: { source: "soql", kind: "listEmpty", list: "connectedAppsIpRelax" },
-    compliance: { NIST_800_53: ["AC-6(10)"], ISO_27001_2022: ["A.8.5"] },
-    tags: ["nhi"],
-  },
-  {
-    id: "access.connected_app_nonexpiring", domain: "Access Control", severity: "Medium",
-    title: "Connected Apps With Non-Expiring Refresh Tokens",
-    description: "No connected app uses non-expiring refresh tokens.",
-    info: "Non-expiring refresh tokens remain valid indefinitely, extending the window for token theft/abuse.",
-    remediation: "Set refresh-token policy to expire after inactivity or a fixed period for each connected app.",
-    check: { source: "soql", kind: "listEmpty", list: "connectedAppsNonExpiring" },
-    compliance: { NIST_800_53: ["AC-12", "IA-5"], ISO_27001_2022: ["A.8.5"] },
-    tags: ["nhi", "key-management"],
   },
 
   // ───────────────────────────── Password Management ─────────────────────────────
@@ -309,16 +270,6 @@ export const BUILTIN_RULES: Rule[] = [
     compliance: { NIST_800_53: ["AC-6(7)"], SOC2: ["CC6.1"] },
     tags: ["over-permissioning"],
   },
-  {
-    id: "perm.install_connected_apps", domain: "Permissions", severity: "Medium",
-    title: "Users With Permission to Install Connected Apps",
-    description: "Number of users who can install connected apps is within policy.",
-    info: "Users who can install connected apps can introduce new third-party access paths (shadow SaaS).",
-    remediation: "Restrict connected-app installation to administrators.",
-    check: { source: "soql", kind: "count", metric: "InstallConnectedApps", op: "<=", threshold: 2 },
-    compliance: { NIST_800_53: ["CM-11(2)"], ISO_27001_2022: ["A.8.19"] },
-    tags: ["over-permissioning"],
-  },
 
   // ───────────────────────────── MFA ─────────────────────────────
   {
@@ -362,16 +313,6 @@ export const BUILTIN_RULES: Rule[] = [
     tags: ["data-exposure"],
   },
   {
-    id: "dlp.public_links", domain: "Data Leakage Protection", severity: "High",
-    title: "Public Links Disabled",
-    description: "Creation of no-authentication public file links is disabled.",
-    info: "Public links allow file access with no sign-in, a common data-leak vector.",
-    remediation: "Setup > Salesforce Files > General Settings: disable public links.",
-    check: { source: "metadata", kind: "setting", path: "dlp.publicLinksEnabled", op: "==", value: false },
-    compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-21"] },
-    tags: ["data-exposure"],
-  },
-  {
     id: "dlp.public_links_nopwd", domain: "Data Leakage Protection", severity: "High",
     title: "Public Links / Content Deliveries Without Password",
     description: "No active public link or content delivery lacks password protection.",
@@ -380,25 +321,6 @@ export const BUILTIN_RULES: Rule[] = [
     check: { source: "soql", kind: "listEmpty", list: "publicLinksNoPassword" },
     compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-6(6)"] },
     tags: ["data-exposure"],
-  },
-  {
-    id: "dlp.guest_sharing_rules", domain: "Data Leakage Protection", severity: "High",
-    title: "Sharing Rules Granting Guest Profile Access",
-    description: "No sharing rule grants record access to the guest/community profile.",
-    info: "Guest-facing sharing rules can silently expose records to unauthenticated site visitors.",
-    remediation: "Review and remove sharing rules that grant access to guest users where not required.",
-    check: { source: "metadata", kind: "listEmpty", list: "guestSharingRules" },
-    compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-21"] },
-    tags: ["data-exposure", "guest"],
-  },
-  {
-    id: "dlp.content_delivery_pwd", domain: "Data Leakage Protection", severity: "Medium",
-    title: "Content Deliveries Require Password by Default",
-    description: "New content deliveries default to requiring a password.",
-    info: "A secure default reduces the chance of accidentally creating an open delivery.",
-    remediation: "Setup > Content Deliveries: default to requiring a password.",
-    check: { source: "metadata", kind: "setting", path: "dlp.contentDeliveryPasswordDefault", op: "==", value: true },
-    compliance: { NIST_800_53: ["AC-6(6)"], ISO_27001_2022: ["A.8.12"] },
   },
 
   // ───────────────────────────── Secure Baseline ─────────────────────────────
@@ -431,15 +353,6 @@ export const BUILTIN_RULES: Rule[] = [
     compliance: { ISO_27001_2022: ["A.8.9", "A.5.34"] },
     tags: ["guest"],
   },
-  {
-    id: "baseline.canvas_nonadmin", domain: "Secure Baseline", severity: "Medium",
-    title: "Disable Canvas App Install by Non-Admins",
-    description: "Non-admin users cannot install canvas apps.",
-    info: "Non-admin canvas-app installation can introduce untrusted embedded third-party code.",
-    remediation: "Restrict canvas-app installation to administrators.",
-    check: { source: "metadata", kind: "setting", path: "baseline.canvasNonAdminInstall", op: "==", value: false },
-    compliance: { NIST_800_53: ["CM-11(2)"] },
-  },
 
   // ───────────────────────────── Auditing ─────────────────────────────
   {
@@ -470,16 +383,6 @@ export const BUILTIN_RULES: Rule[] = [
     remediation: "Restrict PII-view permissions to roles with a documented need.",
     check: { source: "soql", kind: "count", metric: "ViewPII", op: "<=", threshold: 0 },
     compliance: { ISO_27001_2022: ["A.5.34"], NIST_800_53: ["AC-6(7)"] },
-    tags: ["privacy"],
-  },
-  {
-    id: "privacy.scramble", domain: "Privacy Control", severity: "Low",
-    title: "Scramble Specific Personal User Data (Sandbox)",
-    description: "Sensitive personal data is scrambled when refreshing sandboxes.",
-    info: "Unscrambled production PII copied into sandboxes broadens exposure to non-production users.",
-    remediation: "Configure Data Mask / sandbox scrambling for personal fields.",
-    check: { source: "metadata", kind: "setting", path: "privacy.scramblePersonalData", op: "==", value: true },
-    compliance: { ISO_27001_2022: ["A.8.11"], NIST_800_53: ["SC-28"] },
     tags: ["privacy"],
   },
 ];

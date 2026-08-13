@@ -93,13 +93,13 @@ export function Rules({ store }: { store: Store }) {
             <div className="kv"><span className="k mono">listEmpty</span><span>pass when a named <span className="mono">list</span> is empty</span></div>
             <div className="section-label">Available count metrics</div>
             <div className="wrap">
-              {["ViewAllData", "ModifyAllData", "ManageUsers", "BulkApiHardDelete", "WeeklyDataExport", "SuperUser", "DeleteAccounts", "ViewPII", "InstallConnectedApps"].map((m) => (
+              {["ViewAllData", "ModifyAllData", "ManageUsers", "BulkApiHardDelete", "WeeklyDataExport", "DeleteAccounts", "ViewPII"].map((m) => (
                 <span key={m} className="tag mono">{m}</span>
               ))}
             </div>
             <div className="section-label">Available lists</div>
             <div className="wrap">
-              {["oauthFullScopeApps", "connectedAppsIpRelax", "connectedAppsNonExpiring", "objectsPublicExternal", "publicLinksNoPassword", "guestSharingRules"].map((m) => (
+              {["objectsPublicExternal", "publicLinksNoPassword"].map((m) => (
                 <span key={m} className="tag mono">{m}</span>
               ))}
             </div>
