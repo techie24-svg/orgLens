@@ -3,9 +3,9 @@
 // (missing permission, unsupported field, edition difference) degrades the
 // affected checks to "Not Evaluated" instead of a misleading pass.
 
-import { readMetadata, readMetadataMany, listMetadata, flatten } from "./metadata.js";
+import { readMetadata, readMetadataMany, readMetadataAll, listMetadata, flatten } from "./metadata.js";
 
-const API_VERSION = "v60.0";
+const API_VERSION = "v64.0";
 
 // SecuritySettings (Metadata API) flattened-path → rule setting key. These are
 // org config toggles that Health Check / SOQL do not expose.
@@ -213,6 +213,33 @@ async function mapBoolSettings(
 
 // Rule check-keys we know we cannot populate from the read APIs above; these are
 // surfaced to the engine as unavailable so they render Not Evaluated.
+/** Derived lists that only have meaning once ConnectedApp metadata is readable. */
+const CONNECTED_APP_LISTS = [
+  "oauthFullScopeApps", "connectedAppsIpRelax", "connectedAppsNonExpiring",
+  "connectedAppsNoPkce", "connectedAppsClientCredentials", "connectedAppsPublicClient",
+  "connectedAppsIntrospectAll", "connectedAppsRefreshNoSecret",
+  "connectedAppsUnrestricted", "connectedAppsNoSingleLogout", "connectedAppsInsecureCallback",
+];
+
+/** Derived lists backed by Certificate metadata. */
+const CERT_LISTS = [
+  "certsExpired", "certsExpiringSoon", "certsWeakKey", "certsSelfSigned", "certsExportableKey",
+];
+
+/** XML booleans arrive as real booleans or the strings "true"/"false". */
+function mdBool(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return undefined;
+}
+
+/** A metadata field that may be absent, a single value, or an array. */
+function asList(v: unknown): string[] {
+  if (v === undefined || v === null || v === "") return [];
+  return (Array.isArray(v) ? v : [v]).map((x) => String(x)).filter(Boolean);
+}
+
 const UNAVAILABLE = {
   settings: [
     "malware.clickjackVfStandard", "malware.clickjackVfDisabledHeaders", "malware.coep",
@@ -237,7 +264,10 @@ const UNAVAILABLE = {
     "pwd.obscureSecretAnswer", "pwd.complexity", "pwd.questionRestriction",
     "audit.userFieldHistory",
   ] as string[],
-  lists: ["objectsPublicExternal", "publicLinksNoPassword"] as string[],
+  lists: [
+    "objectsPublicExternal", "publicLinksNoPassword",
+    ...CONNECTED_APP_LISTS, ...CERT_LISTS,
+  ] as string[],
   metrics: ["DeleteAccounts", "ViewPII"] as string[],
 };
 
@@ -488,13 +518,72 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     removeFrom(unavailable.lists, "objectsPublicExternal");
   } catch { /* stays unavailable → Not Evaluated */ }
 
+  // ── Connected apps: OAuth config + policy (Metadata API) ───────────────────
+  // listMetadata gives the app names; readMetadata returns the nested oauthConfig
+  // and oauthPolicy that the connected-app checks evaluate. Requires the
+  // "Customize Application" / "Manage Connected Apps" permissions.
+  const connectedApps: any[] = [];
+  try {
+    const names = await listMetadata(instanceUrl, token, "ConnectedApp");
+    const records = await readMetadataAll(instanceUrl, token, "ConnectedApp", names);
+    for (const r of records) {
+      if (!r?.fullName) continue;
+      const oc = r.oauthConfig ?? {};
+      const op = r.oauthPolicy ?? {};
+      const profiles = asList(r.profileName);
+      const permSets = asList(r.permissionSetName);
+      connectedApps.push({
+        name: r.label ?? r.fullName,
+        scopes: asList(oc.scopes).map((s) => String(s).toLowerCase()),
+        ipRelaxation: String(op.ipRelaxation ?? "ENFORCE").toUpperCase() === "RELAX" ? "RELAX" : "ENFORCE",
+        usesNonExpiringRefreshTokens: String(op.refreshTokenPolicy ?? "").toLowerCase() === "infinite",
+        pkceRequired: mdBool(oc.isPkceRequired),
+        clientCredentialsEnabled: mdBool(oc.isClientCredentialEnabled),
+        consumerSecretOptional: mdBool(oc.isConsumerSecretOptional),
+        introspectAllTokens: mdBool(oc.isIntrospectAllTokens),
+        secretRequiredForRefresh: mdBool(oc.isSecretRequiredForRefreshToken),
+        restrictedToProfilesOrPermSets: profiles.length > 0 || permSets.length > 0,
+        singleLogoutUrl: op.singleLogoutUrl ?? oc.singleLogoutUrl ?? "",
+        callbackUrl: oc.callbackUrl ?? "",
+      });
+    }
+    coverage.push(`ConnectedApp: ${connectedApps.length} of ${names.length} apps read`);
+    for (const l of CONNECTED_APP_LISTS) removeFrom(unavailable.lists, l);
+  } catch (e: any) {
+    sf.diagnostics.push(`ConnectedApp metadata: ${String(e?.message ?? e).slice(0, 160)}`);
+  }
+
+  // ── Certificates and key pairs (Metadata API) → Key Management domain ──────
+  const certificates: any[] = [];
+  try {
+    const names = await listMetadata(instanceUrl, token, "Certificate");
+    const records = await readMetadataAll(instanceUrl, token, "Certificate", names);
+    const now = Date.now();
+    for (const r of records) {
+      if (!r?.fullName) continue;
+      const exp = r.expirationDate ? Date.parse(String(r.expirationDate)) : NaN;
+      certificates.push({
+        name: r.masterLabel ?? r.fullName,
+        daysToExpiry: Number.isNaN(exp) ? null : Math.floor((exp - now) / 86_400_000),
+        keySize: Number.isFinite(Number(r.keySize)) && Number(r.keySize) > 0 ? Number(r.keySize) : null,
+        caSigned: mdBool(r.caSigned) === true,
+        privateKeyExportable: mdBool(r.privateKeyExportable) === true,
+      });
+    }
+    coverage.push(`Certificate: ${certificates.length} of ${names.length} certificates read`);
+    for (const l of CERT_LISTS) removeFrom(unavailable.lists, l);
+  } catch (e: any) {
+    sf.diagnostics.push(`Certificate metadata: ${String(e?.message ?? e).slice(0, 160)}`);
+  }
+
   return {
     org,
     settings,
     users,
     permissionCounts,
     permissionAffected,
-    connectedApps: [],
+    connectedApps,
+    certificates,
     publicLinksNoPassword,
     objectsPublicExternal,
     guestSharingRules: [],

@@ -82,6 +82,30 @@ export interface ConnectedApp {
   scopes: string[];
   ipRelaxation: "ENFORCE" | "RELAX";
   usesNonExpiringRefreshTokens: boolean;
+  /** oauthConfig.isPkceRequired — PKCE hardens the authorization-code flow. */
+  pkceRequired?: boolean;
+  /** oauthConfig.isClientCredentialEnabled — machine-to-machine flow, no user context. */
+  clientCredentialsEnabled?: boolean;
+  /** oauthConfig.isConsumerSecretOptional — a public client anyone can impersonate. */
+  consumerSecretOptional?: boolean;
+  /** oauthConfig.isIntrospectAllTokens — lets the app introspect tokens it does not own. */
+  introspectAllTokens?: boolean;
+  /** oauthConfig.isSecretRequiredForRefreshToken */
+  secretRequiredForRefresh?: boolean;
+  /** True when access is restricted to named profiles or permission sets. */
+  restrictedToProfilesOrPermSets?: boolean;
+  singleLogoutUrl?: string;
+  callbackUrl?: string;
+}
+
+/** An org certificate / key pair used for signing, mTLS or SSO. */
+export interface OrgCertificate {
+  name: string;
+  /** Days until expiry; negative when already expired, null when unknown. */
+  daysToExpiry: number | null;
+  keySize: number | null;
+  caSigned: boolean;
+  privateKeyExportable: boolean;
 }
 
 /**
@@ -104,6 +128,8 @@ export interface OrgSnapshot {
   /** Offending usernames per permission, for the Affected column. */
   permissionAffected: Record<string, string[]>;
   connectedApps: ConnectedApp[];
+  /** Org certificates and key pairs, for the Key Management domain. */
+  certificates: OrgCertificate[];
   /** Public content-distribution links missing a password. */
   publicLinksNoPassword: string[];
   /** Objects whose org-wide default external access is Public. */
