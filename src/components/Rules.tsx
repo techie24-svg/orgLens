@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Store } from "../store";
 import type { Rule, Severity } from "../types";
+import { AVAILABLE_LISTS } from "../lib/engine";
 import { Card, SeverityBadge } from "./ui";
 
 const EXAMPLE = `{
@@ -97,9 +98,9 @@ export function Rules({ store }: { store: Store }) {
                 <span key={m} className="tag mono">{m}</span>
               ))}
             </div>
-            <div className="section-label">Available lists</div>
+            <div className="section-label">Available lists ({AVAILABLE_LISTS.length})</div>
             <div className="wrap">
-              {["objectsPublicExternal", "publicLinksNoPassword"].map((m) => (
+              {AVAILABLE_LISTS.map((m) => (
                 <span key={m} className="tag mono">{m}</span>
               ))}
             </div>

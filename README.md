@@ -8,16 +8,19 @@ compliance frameworks, and exports a Falcon-Shield-parity report.
 
 ## Highlights
 
-- **49 built-in checks** across 9 domains (Access Control, Permissions, Data Leakage,
-  Malware Protection, Password Management, MFA, Secure Baseline, Auditing, Privacy),
-  seeded from a real Falcon Shield report.
+- **84 built-in checks** across 11 domains (Access Control, Connected Apps, Permissions,
+  Data Leakage, Malware Protection, Password Management, Key Management, MFA,
+  Secure Baseline, Auditing, Privacy), seeded from a real Falcon Shield report.
 - **Declarative rule engine** — three check kinds (`setting`, `count`, `listEmpty`).
   Add your own checks as JSON in the UI; they're evaluated live, no code change.
 - **Six compliance frameworks** — ISO 27001:2022, NIST 800-53 Rev.5, SOC 2 Type 2,
   CSA CCM, PCI-DSS 4.0, NIST CSF 2.0 — with per-control failing-clause rollups.
 - **Drift detection** — flags checks whose status changed since the last scan.
 - **27-column CSV export** matching the reference report schema exactly (drop-in).
-- **Least-privilege by design** — ships a read-only permission set; never writes to the org.
+- **Read-only by construction** — a scan runs as the user who authorizes it and issues
+  only queries and metadata reads: no DML, no deploy, no metadata write. Authorize as an
+  administrator for full coverage; anything the user can't read reports **Not Evaluated**
+  rather than a false pass.
 
 ## Architecture
 

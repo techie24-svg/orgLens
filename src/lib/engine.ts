@@ -14,6 +14,33 @@ function compare(actual: number | boolean | string, op: Op, expected: number | b
   }
 }
 
+/**
+ * Every list name `resolveList` understands, in display order. Exported so the
+ * custom-rule builder advertises exactly what the engine can resolve — keep this
+ * in step with the switch below.
+ */
+export const AVAILABLE_LISTS = [
+  "oauthFullScopeApps",
+  "connectedAppsIpRelax",
+  "connectedAppsNonExpiring",
+  "connectedAppsNoPkce",
+  "connectedAppsClientCredentials",
+  "connectedAppsPublicClient",
+  "connectedAppsIntrospectAll",
+  "connectedAppsRefreshNoSecret",
+  "connectedAppsUnrestricted",
+  "connectedAppsNoSingleLogout",
+  "connectedAppsInsecureCallback",
+  "certsExpired",
+  "certsExpiringSoon",
+  "certsWeakKey",
+  "certsSelfSigned",
+  "certsExportableKey",
+  "objectsPublicExternal",
+  "publicLinksNoPassword",
+  "guestSharingRules",
+] as const;
+
 /** Derived lists referenced by `listEmpty` checks. */
 function resolveList(snap: OrgSnapshot, key: string): string[] {
   switch (key) {
