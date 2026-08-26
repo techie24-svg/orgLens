@@ -123,6 +123,39 @@ _Compliance (all rows): ISO A.8.2/A.8.3/A.5.18; NIST AC-6(7); SOC2 CC6.1; PCI 7.
 |---|---|---|---|---|---|---|
 | `privacy.view_pii` | Users with Permission to View PII | Med | SOQL | `PermissionsViewRoles`/View PII-equiv | = 0 | ISO A.5.34; NIST AC-6(7) |
 
+## Connected Apps
+
+Sourced from `listMetadata("ConnectedApp")` followed by `readMetadata`, reading each app's
+nested `oauthConfig` and `oauthPolicy`. Every check is `listEmpty` over a derived list, so a
+failure names the offending apps in the Affected column.
+
+| Check ID | Title | Sev | Source | Probe | Pass condition | Compliance |
+|---|---|---|---|---|---|---|
+| `capp.oauth_full_scope` | Connected Apps With Full Access OAuth Scope | High | MD | `oauthConfig.scopes` | no app has `full` | ISO A.5.15; NIST AC-6 |
+| `capp.ip_relaxation` | Connected App IP Restrictions Enforced | High | MD | `oauthPolicy.ipRelaxation` | none `RELAX` | ISO A.8.20; NIST AC-17 |
+| `capp.nonexpiring_refresh` | Connected Apps With Non-Expiring Refresh Tokens | High | MD | `oauthPolicy.refreshTokenPolicy` | none `infinite` | ISO A.5.17; NIST AC-12 |
+| `capp.pkce_required` | OAuth PKCE Requirement | High | MD | `oauthConfig.isPkceRequired` | all true | ISO A.8.5; NIST IA-2 |
+| `capp.client_credentials` | OAuth Client Credentials Flow Restricted | High | MD | `oauthConfig.isClientCredentialEnabled` | all false | ISO A.5.16; NIST AC-6 |
+| `capp.secret_required` | Consumer Secret Required | High | MD | `oauthConfig.isConsumerSecretOptional` | all false | ISO A.5.17; NIST IA-5 |
+| `capp.refresh_secret` | Secret Required For Refresh Token Exchange | Med | MD | `oauthConfig.isSecretRequiredForRefreshToken` | all true | ISO A.5.17; NIST IA-5 |
+| `capp.introspect_all` | Token Introspection Limited To Own Tokens | Med | MD | `oauthConfig.isIntrospectAllTokens` | all false | ISO A.5.15; NIST AC-6 |
+| `capp.restricted_audience` | Connected Apps Limited To Specific Profiles Or Permission Sets | Med | MD | `profileName` / `permissionSetName` | at least one set | ISO A.5.15; NIST AC-3 |
+| `capp.single_logout` | Connected App Single Logout Configured | Low | MD | `oauthPolicy.singleLogoutUrl` | present | ISO A.8.5; NIST AC-12 |
+| `capp.https_callback` | Connected App Callback URLs Use HTTPS | High | MD | `oauthConfig.callbackUrl` | no plaintext `http://` | ISO A.8.24; NIST SC-8 |
+
+## Key Management
+
+Sourced from `listMetadata("Certificate")` followed by `readMetadata`. Expiry is evaluated as
+days relative to scan time, so results shift as certificates age.
+
+| Check ID | Title | Sev | Source | Probe | Pass condition | Compliance |
+|---|---|---|---|---|---|---|
+| `key.no_expired_certs` | No Expired Certificates | High | MD | `expirationDate` | none in the past | ISO A.8.24; NIST SC-12 |
+| `key.certs_expiring_soon` | No Certificates Expiring Within 90 Days | Med | MD | `expirationDate` | none within 90 days | ISO A.8.24; NIST SC-12 |
+| `key.min_key_size` | Certificate Key Length At Least 2048 Bits | High | MD | `keySize` | none < 2048 | ISO A.8.24; NIST SC-13; PCI 4.2.1 |
+| `key.ca_signed` | Certificates Are CA-Signed | Med | MD | `caSigned` | all true | ISO A.8.24; NIST SC-12 |
+| `key.private_key_not_exportable` | Certificate Private Keys Not Exportable | High | MD | `privateKeyExportable` | all false | ISO A.8.24; NIST SC-12 |
+
 ---
 
 ## Notes for implementation
