@@ -81,6 +81,8 @@ export const SAMPLE_ORG: OrgSnapshot = {
     "access.firstPartyCookies": false,
     "access.stabilizedHostnames": true,
     "access.logRedirections": false,
+    "access.trustedIpRangesConfigured": true,
+    "access.enforceIpRangesEveryRequest": false,
     // Password Management (NIST: expiration should be "never" = 0)
     "pwd.expirationDays": 90,
     "pwd.minLifetime": true,
@@ -152,6 +154,22 @@ export const SAMPLE_ORG: OrgSnapshot = {
       callbackUrl: "https://tableau.example.com/callback",
     },
   ],
+  profilePolicies: [
+    {
+      profile: "Legacy Integration User", sessionTimeout: 480, requiredSessionLevel: "STANDARD",
+      passwordExpiration: 0, passwordComplexity: 1, passwordQuestion: 0, lockoutInterval: 0,
+    },
+    {
+      profile: "Contact Center Agent", sessionTimeout: 240, requiredSessionLevel: "STANDARD",
+      passwordExpiration: 180, passwordComplexity: 2, passwordQuestion: 1, lockoutInterval: 15,
+    },
+    {
+      profile: "Underwriting Analyst", sessionTimeout: 120, requiredSessionLevel: "HIGH_ASSURANCE",
+      passwordExpiration: 90, passwordComplexity: 3, passwordQuestion: 1, lockoutInterval: 30,
+    },
+  ],
+  publicReportFolders: ["Claims Leadership Reports", "All Company Metrics"],
+  publicDashboardFolders: ["Executive Dashboards"],
   externalClientApps: [
     {
       name: "PartnerPortal_ECA",

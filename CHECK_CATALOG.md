@@ -143,6 +143,24 @@ failure names the offending apps in the Affected column.
 | `capp.single_logout` | Connected App Single Logout Configured | Low | MD | `oauthPolicy.singleLogoutUrl` | present | ISO A.8.5; NIST AC-12 |
 | `capp.https_callback` | Connected App Callback URLs Use HTTPS | High | MD | `oauthConfig.callbackUrl` | no plaintext `http://` | ISO A.8.24; NIST SC-8 |
 
+## Profile Policies
+
+Per-profile overrides of the org-wide session and password policy, read from
+`ProfileSessionSetting` and `ProfilePasswordPolicy`. A profile appears in these components
+only when it deviates from the org default, so an empty result means every profile inherits
+the org policy already covered by the `access.*` and `pwd.*` rules. These are deliberately
+read as standalone types rather than via `Profile`, whose payload carries every field
+permission and is far too large to pull for every profile in a scan.
+
+| Check ID | Title | Sev | Source | Probe | Pass condition | Compliance |
+|---|---|---|---|---|---|---|
+| `profile.password_expiration` | Profile Passwords Expiration | High | MD | `passwordExpiration` | none = 0 (never) | ISO A.5.17; NIST IA-5(1) |
+| `profile.password_change_frequency` | Profile Password Change Frequency | Med | MD | `passwordExpiration` | none > 90 days | ISO A.5.17; NIST IA-5(1) |
+| `profile.session_timeout` | Profile Inactive Session Logout Timeout | Low | MD | `sessionTimeout` | none > 120 min | ISO A.8.5; NIST AC-11 |
+| `profile.password_complexity` | Profile Password Complexity | Low | MD | `passwordComplexity` | none < 2 | ISO A.5.17; NIST IA-5(1) |
+| `profile.password_hint` | Profile Restrict Password Hint Answers | Low | MD | `passwordQuestion` | none = 0 | ISO A.5.17; NIST IA-5 |
+| `profile.lockout_interval` | Profile Lockout Interval | Low | MD | `lockoutInterval` | none < 15 min | ISO A.5.17; NIST AC-7 |
+
 ## External Client Apps
 
 The Connected App successor, and a separate metadata family — the `capp.*` rules above do

@@ -503,6 +503,27 @@ export const BUILTIN_RULES: Rule[] = [
     compliance: { NIST_800_53: ["IA-2(1)"], SOC2: ["CC6.1"] },
   },
 
+  {
+    id: "access.trusted_ip_ranges", domain: "Access Control", severity: "Medium",
+    title: "Trusted IP Ranges Configuration",
+    description: "The org defines at least one trusted (login) IP range.",
+    info: "Trusted IP ranges are the perimeter that device activation and profile login restrictions build on; with none defined, every other IP-based control has nothing to enforce against.",
+    remediation: "Setup > Network Access: add the corporate egress ranges as trusted IP ranges.",
+    check: { source: "metadata", kind: "setting", path: "access.trustedIpRangesConfigured", op: "==", value: true },
+    compliance: { ISO_27001_2022: ["A.8.20"], NIST_800_53: ["AC-17"] },
+    tags: ["network"],
+  },
+  {
+    id: "access.enforce_ip_every_request", domain: "Access Control", severity: "Medium",
+    title: "Login IP Ranges Enforced On Every Request",
+    description: "Login IP ranges are enforced on every page request, not just at login.",
+    info: "When enforced only at login, a session that began inside the allowed range stays valid after the token moves outside it — which is exactly what session hijacking exploits.",
+    remediation: "Setup > Session Settings: enable enforcement of login IP ranges on every request.",
+    check: { source: "metadata", kind: "setting", path: "access.enforceIpRangesEveryRequest", op: "==", value: true },
+    compliance: { ISO_27001_2022: ["A.8.20"], NIST_800_53: ["AC-17", "SC-23"] },
+    tags: ["network"],
+  },
+
   // ───────────────────────────── Data Leakage Protection ─────────────────────────────
   {
     id: "dlp.owd_public", domain: "Data Leakage Protection", severity: "High",
@@ -521,6 +542,26 @@ export const BUILTIN_RULES: Rule[] = [
     info: "Snapshots can surface data to users who lack access to the underlying report.",
     remediation: "Setup > Report and Dashboard Settings: disable dashboard component snapshots.",
     check: { source: "metadata", kind: "setting", path: "dlp.dashboardSnapshots", op: "==", value: false },
+    compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-21"] },
+    tags: ["data-exposure"],
+  },
+  {
+    id: "dlp.public_report_folders", domain: "Data Leakage Protection", severity: "Medium",
+    title: "Public Report Folders Accessible By All Users",
+    description: "No report folder has an access type of Public.",
+    info: "A Public report folder is readable by every user in the org, so any report placed there leaks whatever the report returns regardless of who was meant to see it.",
+    remediation: "Setup > Report and Dashboard Folders: change the folder's access to Shared and grant specific groups or roles.",
+    check: { source: "soql", kind: "listEmpty", list: "publicReportFolders" },
+    compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-21"] },
+    tags: ["data-exposure"],
+  },
+  {
+    id: "dlp.public_dashboard_folders", domain: "Data Leakage Protection", severity: "Medium",
+    title: "Public Dashboard Folders Accessible By All Users",
+    description: "No dashboard folder has an access type of Public.",
+    info: "Dashboards aggregate across objects, so a Public dashboard folder can expose summarized data to users who cannot open any of the underlying records.",
+    remediation: "Change the dashboard folder's access to Shared and grant specific groups or roles.",
+    check: { source: "soql", kind: "listEmpty", list: "publicDashboardFolders" },
     compliance: { ISO_27001_2022: ["A.8.12"], NIST_800_53: ["AC-21"] },
     tags: ["data-exposure"],
   },
@@ -640,6 +681,17 @@ export const BUILTIN_RULES: Rule[] = [
     remediation: "Setup > User Management Settings: enable user field history tracking.",
     check: { source: "metadata", kind: "setting", path: "audit.userFieldHistory", op: "==", value: true },
     compliance: { NIST_800_53: ["AU-2", "AU-12"], SOC2: ["CC7.2"], ISO_27001_2022: ["A.8.15"] },
+  },
+
+  {
+    id: "perm.view_all_custom_settings", domain: "Permissions", severity: "Medium",
+    title: "Users With Permission View All Custom Settings",
+    description: "Number of users granted 'View All Custom Settings' is within policy.",
+    info: "Custom settings routinely hold API keys, endpoints and feature flags, and this permission reveals every one of them regardless of object-level security.",
+    remediation: "Remove 'View All Custom Settings' from profiles and permission sets that don't administer configuration.",
+    check: { source: "soql", kind: "count", metric: "ViewAllCustomSettings", op: "<=", threshold: 2 },
+    compliance: { ISO_27001_2022: ["A.8.2"], NIST_800_53: ["AC-6"] },
+    tags: ["over-permissioning"],
   },
 
   // ───────────────────────────── Privacy Control ─────────────────────────────
@@ -765,6 +817,71 @@ export const BUILTIN_RULES: Rule[] = [
     check: { source: "metadata", kind: "listEmpty", list: "connectedAppsInsecureCallback" },
     compliance: { ISO_27001_2022: ["A.8.24"], NIST_800_53: ["SC-8"] },
     tags: ["oauth", "encryption-in-transit"],
+  },
+
+  // ──────────────── Profile Policies (per-profile overrides) ────────────────
+  // A profile only appears in these components when it deviates from the org
+  // default, so an empty result means every profile inherits the org-wide policy
+  // already covered by the access.* and pwd.* rules.
+  {
+    id: "profile.password_expiration", domain: "Profile Policies", severity: "High",
+    title: "Profile Passwords Expiration",
+    description: "No profile overrides password expiry to 'never expires'.",
+    info: "A profile-level override silently exempts its users from the org password policy, and 'never expires' turns their password into a permanent credential.",
+    remediation: "Setup > Profiles > Password Policies: set an expiry period, or remove the override so the org policy applies.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesPasswordNeverExpires" },
+    compliance: { ISO_27001_2022: ["A.5.17"], NIST_800_53: ["IA-5(1)"], SOC2: ["CC6.1"] },
+    tags: ["profile-override"],
+  },
+  {
+    id: "profile.password_change_frequency", domain: "Profile Policies", severity: "Medium",
+    title: "Profile Password Change Frequency",
+    description: "No profile allows passwords to live longer than 90 days.",
+    info: "Expiry windows beyond 90 days extend how long a leaked credential stays valid, and profile overrides are the usual way this creeps past the org policy.",
+    remediation: "Reduce the profile's password expiry to 90 days or fewer.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesPasswordExpiryTooLong" },
+    compliance: { ISO_27001_2022: ["A.5.17"], NIST_800_53: ["IA-5(1)"] },
+    tags: ["profile-override"],
+  },
+  {
+    id: "profile.session_timeout", domain: "Profile Policies", severity: "Low",
+    title: "Profile Inactive Session Logout Timeout",
+    description: "No profile extends its session timeout beyond two hours.",
+    info: "A long timeout leaves an authenticated session usable on an unattended device well after the user has walked away.",
+    remediation: "Setup > Profiles > Session Settings: set the timeout to two hours or less.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesLongSessionTimeout" },
+    compliance: { ISO_27001_2022: ["A.8.5"], NIST_800_53: ["AC-11"] },
+    tags: ["profile-override"],
+  },
+  {
+    id: "profile.password_complexity", domain: "Profile Policies", severity: "Low",
+    title: "Profile Password Complexity",
+    description: "No profile weakens password complexity below mixed character classes.",
+    info: "Alphanumeric-only or unrestricted passwords fall quickly to offline cracking and credential stuffing.",
+    remediation: "Raise the profile's password complexity, or remove the override.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesWeakPasswordComplexity" },
+    compliance: { ISO_27001_2022: ["A.5.17"], NIST_800_53: ["IA-5(1)"] },
+    tags: ["profile-override"],
+  },
+  {
+    id: "profile.password_hint", domain: "Profile Policies", severity: "Low",
+    title: "Profile Restrict Password Hint Answers",
+    description: "No profile allows a password hint answer to contain the password.",
+    info: "If the hint answer may contain the password, the hint becomes a plaintext disclosure of the credential it protects.",
+    remediation: "Enable the 'hint answer cannot contain password' restriction on the profile.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesUnrestrictedPasswordHint" },
+    compliance: { ISO_27001_2022: ["A.5.17"], NIST_800_53: ["IA-5"] },
+    tags: ["profile-override"],
+  },
+  {
+    id: "profile.lockout_interval", domain: "Profile Policies", severity: "Low",
+    title: "Profile Lockout Interval",
+    description: "No profile sets a lockout shorter than 15 minutes.",
+    info: "A short lockout barely slows a password-guessing attack, since the attacker simply waits out the interval and resumes.",
+    remediation: "Set the profile's lockout duration to 15 minutes or longer.",
+    check: { source: "metadata", kind: "listEmpty", list: "profilesShortLockout" },
+    compliance: { ISO_27001_2022: ["A.5.17"], NIST_800_53: ["AC-7"] },
+    tags: ["profile-override"],
   },
 
   // ─────────────────── External Client Apps (Metadata API) ───────────────────

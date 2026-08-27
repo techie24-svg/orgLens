@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Store } from "../store";
 import type { Rule, Severity } from "../types";
-import { AVAILABLE_LISTS } from "../lib/engine";
+import { AVAILABLE_LISTS, AVAILABLE_METRICS } from "../lib/engine";
 import { Card, SeverityBadge } from "./ui";
 
 const EXAMPLE = `{
@@ -92,9 +92,9 @@ export function Rules({ store }: { store: Store }) {
             <div className="kv"><span className="k mono">setting</span><span>probe a config <span className="mono">path</span>, compare with <span className="mono">op</span> to <span className="mono">value</span></span></div>
             <div className="kv"><span className="k mono">count</span><span>resolve a <span className="mono">metric</span>, compare with <span className="mono">op</span> to <span className="mono">threshold</span></span></div>
             <div className="kv"><span className="k mono">listEmpty</span><span>pass when a named <span className="mono">list</span> is empty</span></div>
-            <div className="section-label">Available count metrics</div>
+            <div className="section-label">Available count metrics ({AVAILABLE_METRICS.length})</div>
             <div className="wrap">
-              {["ViewAllData", "ModifyAllData", "ManageUsers", "BulkApiHardDelete", "WeeklyDataExport", "DeleteAccounts", "ViewPII"].map((m) => (
+              {AVAILABLE_METRICS.map((m) => (
                 <span key={m} className="tag mono">{m}</span>
               ))}
             </div>
