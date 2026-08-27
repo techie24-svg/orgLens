@@ -9,11 +9,12 @@ import { downloadCsv } from "./lib/report";
 
 type View = "Connections" | "Dashboard" | "Findings" | "Compliance" | "Rules";
 
+// Compliance is intentionally absent: the view still renders if routed to, but
+// framework coverage is too uneven across the catalog to present as a score.
 const NAV: { id: View; label: string }[] = [
   { id: "Connections", label: "Connections" },
   { id: "Dashboard", label: "Dashboard" },
   { id: "Findings", label: "Findings" },
-  { id: "Compliance", label: "Compliance" },
   { id: "Rules", label: "Rule Catalog" },
 ];
 

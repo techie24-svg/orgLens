@@ -3,8 +3,8 @@
 A self-owned, agentless **SaaS Security Posture Management (SSPM)** tool for Salesforce —
 a customizable equivalent of CrowdStrike Falcon Shield's Salesforce module. OrgLens
 connects to any org via OAuth (like Workbench), runs a declarative catalog of security
-checks against the org's live configuration, scores posture, maps every finding to six
-compliance frameworks, and exports a Falcon-Shield-parity report.
+checks against the org's live configuration, scores posture, and exports a report in the
+Falcon Shield schema.
 
 ## Highlights
 
@@ -14,10 +14,12 @@ compliance frameworks, and exports a Falcon-Shield-parity report.
   seeded from a real Falcon Shield report.
 - **Declarative rule engine** — three check kinds (`setting`, `count`, `listEmpty`).
   Add your own checks as JSON in the UI; they're evaluated live, no code change.
-- **Six compliance frameworks** — ISO 27001:2022, NIST 800-53 Rev.5, SOC 2 Type 2,
-  CSA CCM, PCI-DSS 4.0, NIST CSF 2.0 — with per-control failing-clause rollups.
+- **Compliance mappings** — every rule carries control IDs for ISO 27001:2022,
+  NIST 800-53 Rev.5, SOC 2 Type 2, CSA CCM, PCI-DSS 4.0 and NIST CSF 2.0, surfaced in the
+  finding detail. Coverage is uneven across frameworks, so they are not rolled up into a
+  score; the Compliance view exists but is not linked from the nav.
 - **Drift detection** — flags checks whose status changed since the last scan.
-- **27-column CSV export** matching the reference report schema exactly (drop-in).
+- **19-column CSV export** matching the reference report schema through `Check ID`.
 - **Read-only by construction** — a scan runs as the user who authorizes it and issues
   only queries and metadata reads: no DML, no deploy, no metadata write. Authorize as an
   administrator for full coverage; anything the user can't read reports **Not Evaluated**
@@ -29,8 +31,8 @@ compliance frameworks, and exports a Falcon-Shield-parity report.
 React + TS UI  ──►  Rule engine  ──►  data source
  (dashboard,        (evaluate         ├─ MockProvider  (bundled sample org, demo)
   findings,          catalog vs       └─ /api/*  serverless backend (live)
-  compliance,        snapshot)             OAuth token exchange + Health Check /
-  rule editor)                             Tooling / SOQL — tokens stay server-side
+  rule editor)       snapshot)             OAuth token exchange + Health Check /
+                                           Tooling / SOQL — tokens stay server-side
 ```
 
 Like Workbench, OrgLens is a **hosted web app**: you OAuth into any org and all
@@ -43,7 +45,7 @@ identically.
 - `src/lib/engine.ts` — evaluator (setting / count / listEmpty) + drift diff; honors
   `unavailable` data so checks a live scan can't retrieve show **Not Evaluated** (never a false pass).
 - `src/lib/api.ts` — frontend client for the backend (`session`, `scan`, OAuth start, logout).
-- `src/lib/report.ts` — 27-column Falcon-Shield-parity CSV exporter.
+- `src/lib/report.ts` — 19-column CSV exporter (Falcon Shield schema through `Check ID`).
 - `api/oauth/{start,callback}.ts` — OAuth 2.0 web-server flow **with PKCE**.
 - `api/{session,scan,logout}.ts` — session status, live scan, disconnect.
 - `api/_lib/` — encrypted-cookie session, OAuth helpers, Salesforce snapshot assembler.
