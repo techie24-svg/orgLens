@@ -221,6 +221,14 @@ const CONNECTED_APP_LISTS = [
   "connectedAppsUnrestricted", "connectedAppsNoSingleLogout", "connectedAppsInsecureCallback",
 ];
 
+/** Derived lists backed by the External Client App metadata types. */
+const ECA_LISTS = [
+  "ecaNoPkce", "ecaNoRefreshRotation", "ecaRefreshNoSecret", "ecaPublicClient",
+  "ecaIntrospectAll", "ecaInsecureCallback", "ecaIpRelax", "ecaClientCredentials",
+  "ecaTokenExchange", "ecaSelfAuthorized", "ecaNonExpiringRefresh",
+  "ecaLongRefreshValidity", "ecaStandardSessionLevel",
+];
+
 /** Derived lists backed by Certificate metadata. */
 const CERT_LISTS = [
   "certsExpired", "certsExpiringSoon", "certsWeakKey", "certsSelfSigned", "certsExportableKey",
@@ -232,6 +240,18 @@ function mdBool(v: unknown): boolean | undefined {
   if (v === "true") return true;
   if (v === "false") return false;
   return undefined;
+}
+
+/** Normalize a refresh-token validity period to days so one rule can compare them. */
+function toDays(period: unknown, unit: unknown): number | null {
+  const n = Number(period);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  switch (String(unit ?? "").toLowerCase()) {
+    case "hours": return n / 24;
+    case "months": return n * 30;
+    case "days": return n;
+    default: return n;
+  }
 }
 
 /** A metadata field that may be absent, a single value, or an array. */
@@ -266,7 +286,7 @@ const UNAVAILABLE = {
   ] as string[],
   lists: [
     "objectsPublicExternal", "publicLinksNoPassword",
-    ...CONNECTED_APP_LISTS, ...CERT_LISTS,
+    ...CONNECTED_APP_LISTS, ...CERT_LISTS, ...ECA_LISTS,
   ] as string[],
   metrics: ["DeleteAccounts", "ViewPII"] as string[],
 };
@@ -576,6 +596,56 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     sf.diagnostics.push(`Certificate metadata: ${String(e?.message ?? e).slice(0, 160)}`);
   }
 
+  // ── External Client Apps (Connected App successor) ─────────────────────────
+  // OAuth config is split across two metadata types: GlobalOauthSettings holds
+  // credential handling, ConfigurablePolicies holds runtime policy. Both carry an
+  // `externalClientApplication` back-reference, so join on that rather than on
+  // fullName (the policy component's fullName is suffixed, e.g. "MyApp_oauthPlcy").
+  const externalClientApps: any[] = [];
+  try {
+    const apps = new Map<string, any>();
+    const upsert = (key: string): any => {
+      if (!apps.has(key)) apps.set(key, { name: key });
+      return apps.get(key);
+    };
+
+    const globalNames = await listMetadata(instanceUrl, token, "ExtlClntAppGlobalOauthSettings");
+    for (const r of await readMetadataAll(instanceUrl, token, "ExtlClntAppGlobalOauthSettings", globalNames)) {
+      const key = r?.externalClientApplication ?? r?.fullName;
+      if (!key) continue;
+      const a = upsert(String(key));
+      a.pkceRequired = mdBool(r.isPkceRequired);
+      a.refreshTokenRotation = mdBool(r.isRefreshTokenRotationEnabled);
+      a.secretRequiredForRefresh = mdBool(r.isSecretRequiredForRefreshToken);
+      a.consumerSecretOptional = mdBool(r.isConsumerSecretOptional);
+      a.introspectAllTokens = mdBool(r.isIntrospectAllTokens);
+      a.callbackUrl = r.callbackUrl ?? "";
+    }
+
+    const policyNames = await listMetadata(instanceUrl, token, "ExtlClntAppOauthConfigurablePolicies");
+    for (const r of await readMetadataAll(instanceUrl, token, "ExtlClntAppOauthConfigurablePolicies", policyNames)) {
+      const key = r?.externalClientApplication ?? r?.fullName;
+      if (!key) continue;
+      const a = upsert(String(key));
+      a.ipRelaxation = String(r.ipRelaxationPolicyType ?? "Enforce").toLowerCase().startsWith("relax") ? "RELAX" : "ENFORCE";
+      a.clientCredentialsEnabled = mdBool(r.isClientCredentialsFlowEnabled);
+      a.tokenExchangeEnabled = mdBool(r.isTokenExchangeFlowEnabled);
+      a.permittedUsers = r.permittedUsersPolicyType ? String(r.permittedUsersPolicyType) : undefined;
+      a.refreshTokenPolicy = r.refreshTokenPolicyType ? String(r.refreshTokenPolicyType) : undefined;
+      a.refreshTokenValidityDays = toDays(r.refreshTokenValidityPeriod, r.refreshTokenValidityUnit);
+      a.requiredSessionLevel = r.requiredSessionLevel ? String(r.requiredSessionLevel).toUpperCase() : undefined;
+    }
+
+    externalClientApps.push(...apps.values());
+    coverage.push(
+      `External Client Apps: ${externalClientApps.length} apps ` +
+      `(${globalNames.length} oauth settings, ${policyNames.length} policy components)`
+    );
+    for (const l of ECA_LISTS) removeFrom(unavailable.lists, l);
+  } catch (e: any) {
+    sf.diagnostics.push(`External Client App metadata: ${String(e?.message ?? e).slice(0, 160)}`);
+  }
+
   return {
     org,
     settings,
@@ -583,6 +653,7 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     permissionCounts,
     permissionAffected,
     connectedApps,
+    externalClientApps,
     certificates,
     publicLinksNoPassword,
     objectsPublicExternal,

@@ -143,6 +143,29 @@ failure names the offending apps in the Affected column.
 | `capp.single_logout` | Connected App Single Logout Configured | Low | MD | `oauthPolicy.singleLogoutUrl` | present | ISO A.8.5; NIST AC-12 |
 | `capp.https_callback` | Connected App Callback URLs Use HTTPS | High | MD | `oauthConfig.callbackUrl` | no plaintext `http://` | ISO A.8.24; NIST SC-8 |
 
+## External Client Apps
+
+The Connected App successor, and a separate metadata family — the `capp.*` rules above do
+not see these apps. Credential handling is read from `ExtlClntAppGlobalOauthSettings` and
+runtime policy from `ExtlClntAppOauthConfigurablePolicies`; the two are joined on their
+shared `externalClientApplication` back-reference.
+
+| Check ID | Title | Sev | Source | Probe | Pass condition | Compliance |
+|---|---|---|---|---|---|---|
+| `eca.pkce_required` | External Client App PKCE Requirement | High | MD | `isPkceRequired` | all true | ISO A.8.5; NIST IA-2 |
+| `eca.refresh_rotation` | External Client App Refresh Token Rotation | Med | MD | `isRefreshTokenRotationEnabled` | all true | ISO A.5.17; NIST IA-5 |
+| `eca.refresh_secret` | External Client App Secret Required For Refresh Token | Med | MD | `isSecretRequiredForRefreshToken` | all true | ISO A.5.17; NIST IA-5 |
+| `eca.consumer_secret_required` | External Client App Consumer Secret Required | High | MD | `isConsumerSecretOptional` | all false | ISO A.5.17; NIST IA-5 |
+| `eca.introspect_all` | External Client App Token Introspection Limited | Med | MD | `isIntrospectAllTokens` | all false | ISO A.5.15; NIST AC-6 |
+| `eca.https_callback` | External Client App Callback URLs Use HTTPS | High | MD | `callbackUrl` | no plaintext `http://` | ISO A.8.24; NIST SC-8 |
+| `eca.ip_relaxation` | External Client App IP Restrictions Enforced | High | MD | `ipRelaxationPolicyType` | none `Relax` | ISO A.8.20; NIST AC-17 |
+| `eca.client_credentials` | External Client App Client Credentials Flow Restricted | High | MD | `isClientCredentialsFlowEnabled` | all false | ISO A.5.16; NIST AC-6 |
+| `eca.token_exchange` | External Client App Token Exchange Flow Restricted | Med | MD | `isTokenExchangeFlowEnabled` | all false | ISO A.5.15; NIST AC-6 |
+| `eca.permitted_users` | External Client App Permitted Users Are Admin-Approved | Med | MD | `permittedUsersPolicyType` | none `AllSelfAuthorized` | ISO A.5.15; NIST AC-3 |
+| `eca.refresh_policy` | External Client Apps Without Non-Expiring Refresh Tokens | High | MD | `refreshTokenPolicyType` | none `Infinite` | ISO A.5.17; NIST AC-12 |
+| `eca.refresh_validity` | External Client App Refresh Token Validity Within One Year | Low | MD | `refreshTokenValidityPeriod` + `Unit` | <= 365 days | ISO A.5.17; NIST AC-12 |
+| `eca.session_level` | External Client App Requires High Assurance Session | Low | MD | `requiredSessionLevel` | all `HIGH_ASSURANCE` | ISO A.8.5; NIST IA-2(1) |
+
 ## Key Management
 
 Sourced from `listMetadata("Certificate")` followed by `readMetadata`. Expiry is evaluated as
