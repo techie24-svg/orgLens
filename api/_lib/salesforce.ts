@@ -48,6 +48,7 @@ const MD_SECURITY_BOOL: Record<string, string> = {
   "sessionSettings.allowUserAuthenticationByCertificate": "access.certificateBasedAuth",
   "sessionSettings.enablePostForSessions": "baseline.postForSessions",
   "singleSignOnSettings.isLoginWithSalesforceCredentialsDisabled": "access.disableLoginWithSfCredentials",
+  "sessionSettings.enforceIpRangesEveryRequest": "access.enforceIpRangesEveryRequest",
   "sessionSettings.enableU2F": "mfa.securityKeyU2F",
   "sessionSettings.enableSMSIdentity": "mfa.smsIdentityVerification",
   "sessionSettings.enableBuiltInAuthenticator": "mfa.builtInAuthenticator",
@@ -121,6 +122,7 @@ const PERMISSION_FIELDS: Record<string, string> = {
   BulkApiHardDelete: "PermissionsBulkApiHardDelete",
   WeeklyDataExport: "PermissionsDataExport",
   ViewPII: "PermissionsViewEncryptedData",
+  ViewAllCustomSettings: "PermissionsViewAllCustomSettings",
 };
 
 // SecurityHealthCheckRisks.Setting is a localized *display label*, not an API
@@ -229,6 +231,15 @@ const ECA_LISTS = [
   "ecaLongRefreshValidity", "ecaStandardSessionLevel",
 ];
 
+/** Derived lists backed by the per-profile policy override metadata types. */
+const PROFILE_POLICY_LISTS = [
+  "profilesPasswordNeverExpires", "profilesPasswordExpiryTooLong", "profilesLongSessionTimeout",
+  "profilesWeakPasswordComplexity", "profilesUnrestrictedPasswordHint", "profilesShortLockout",
+];
+
+/** Derived lists backed by the Folder SObject. */
+const FOLDER_LISTS = ["publicReportFolders", "publicDashboardFolders"];
+
 /** Derived lists backed by Certificate metadata. */
 const CERT_LISTS = [
   "certsExpired", "certsExpiringSoon", "certsWeakKey", "certsSelfSigned", "certsExportableKey",
@@ -277,6 +288,7 @@ const UNAVAILABLE = {
     "access.identityConfirmOnEmailChange", "access.emailChangeConfirmCommunities",
     "access.certificateBasedAuth", "access.disableLoginWithSfCredentials",
     "access.firstPartyCookies", "access.stabilizedHostnames", "access.logRedirections",
+    "access.trustedIpRangesConfigured", "access.enforceIpRangesEveryRequest",
     "mfa.securityKeyU2F", "mfa.smsIdentityVerification", "mfa.builtInAuthenticator",
     "mfa.lightningLogin",
     "baseline.crossOrgRedirects", "baseline.redirectBlockMode", "baseline.postForSessions",
@@ -287,8 +299,9 @@ const UNAVAILABLE = {
   lists: [
     "objectsPublicExternal", "publicLinksNoPassword",
     ...CONNECTED_APP_LISTS, ...CERT_LISTS, ...ECA_LISTS,
+    ...PROFILE_POLICY_LISTS, ...FOLDER_LISTS,
   ] as string[],
-  metrics: ["DeleteAccounts", "ViewPII"] as string[],
+  metrics: ["DeleteAccounts", "ViewPII", "ViewAllCustomSettings"] as string[],
 };
 
 export async function assembleSnapshot(instanceUrl: string, token: string): Promise<any> {
@@ -363,10 +376,14 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
   } catch { /* health-check-derived settings stay unavailable */ }
 
   // ── Metadata API: org security/session/file-upload toggles ──────────────────
+  // Retained past this block so the trusted-IP-range check can inspect the same
+  // payload without a second read.
+  let securityFlat: Record<string, string> | null = null;
   try {
     const sec = await readMetadata(instanceUrl, token, "SecuritySettings", "Security");
     if (sec) {
       const flat = flatten(sec);
+      securityFlat = flat;
       let mapped = 0;
       for (const [path, key] of Object.entries(MD_SECURITY_BOOL)) {
         if (flat[path] !== undefined) { settings[key] = hcBool(flat[path]); removeFrom(unavailable.settings, key); mapped++; }
@@ -646,6 +663,81 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     sf.diagnostics.push(`External Client App metadata: ${String(e?.message ?? e).slice(0, 160)}`);
   }
 
+  // ── Per-profile session / password policy overrides ────────────────────────
+  // ProfileSessionSetting and ProfilePasswordPolicy are small standalone
+  // components (unlike the Profile type, whose payload carries every field
+  // permission), and they exist only where a profile deviates from the org
+  // default — so an absent profile is simply inheriting the org-wide policy.
+  const profilePolicies: any[] = [];
+  try {
+    const byProfile = new Map<string, any>();
+    const upsert = (name: string): any => {
+      if (!byProfile.has(name)) byProfile.set(name, { profile: name });
+      return byProfile.get(name);
+    };
+
+    const sessionNames = await listMetadata(instanceUrl, token, "ProfileSessionSetting");
+    for (const r of await readMetadataAll(instanceUrl, token, "ProfileSessionSetting", sessionNames)) {
+      const key = r?.profile ?? r?.fullName;
+      if (!key) continue;
+      const p = upsert(String(key));
+      p.sessionTimeout = mdNum(r.sessionTimeout);
+      p.requiredSessionLevel = r.requiredSessionLevel ? String(r.requiredSessionLevel).toUpperCase() : undefined;
+    }
+
+    const pwdNames = await listMetadata(instanceUrl, token, "ProfilePasswordPolicy");
+    for (const r of await readMetadataAll(instanceUrl, token, "ProfilePasswordPolicy", pwdNames)) {
+      const key = r?.profile ?? r?.fullName;
+      if (!key) continue;
+      const p = upsert(String(key));
+      p.passwordExpiration = mdNum(r.passwordExpiration);
+      p.passwordComplexity = mdNum(r.passwordComplexity);
+      p.passwordQuestion = mdNum(r.passwordQuestion);
+      p.lockoutInterval = mdNum(r.lockoutInterval);
+    }
+
+    profilePolicies.push(...byProfile.values());
+    coverage.push(
+      `Profile policy overrides: ${profilePolicies.length} profiles ` +
+      `(${sessionNames.length} session, ${pwdNames.length} password)`
+    );
+    for (const l of PROFILE_POLICY_LISTS) removeFrom(unavailable.lists, l);
+  } catch (e: any) {
+    sf.diagnostics.push(`Profile policy metadata: ${String(e?.message ?? e).slice(0, 160)}`);
+  }
+
+  // ── Trusted IP ranges (org network access) ─────────────────────────────────
+  // securityFlat is the already-flattened SecuritySettings payload; ipRanges is
+  // an array so flatten() indexes it as networkAccess.ipRanges[0].start etc.
+  if (securityFlat) {
+    const hasRange = Object.keys(securityFlat).some((k) => k.startsWith("networkAccess.ipRanges"));
+    settings["access.trustedIpRangesConfigured"] = hasRange;
+    removeFrom(unavailable.settings, "access.trustedIpRangesConfigured");
+  }
+
+  // ── Public report / dashboard folders (Folder SObject) ─────────────────────
+  // AccessType 'Public' means every user can see the folder's contents.
+  const publicReportFolders: string[] = [];
+  const publicDashboardFolders: string[] = [];
+  try {
+    const f = await sf.query<any>(
+      "SELECT Name, DeveloperName, Type FROM Folder " +
+      "WHERE AccessType = 'Public' AND Type IN ('Report','Dashboard') LIMIT 500"
+    );
+    for (const r of f.records) {
+      const label = r.Name ?? r.DeveloperName ?? "(unnamed folder)";
+      if (r.Type === "Report") publicReportFolders.push(label);
+      else publicDashboardFolders.push(label);
+    }
+    coverage.push(
+      `Folders: ${publicReportFolders.length} public report, ` +
+      `${publicDashboardFolders.length} public dashboard`
+    );
+    for (const l of FOLDER_LISTS) removeFrom(unavailable.lists, l);
+  } catch (e: any) {
+    sf.diagnostics.push(`Folder query: ${String(e?.message ?? e).slice(0, 160)}`);
+  }
+
   return {
     org,
     settings,
@@ -654,6 +746,9 @@ export async function assembleSnapshot(instanceUrl: string, token: string): Prom
     permissionAffected,
     connectedApps,
     externalClientApps,
+    profilePolicies,
+    publicReportFolders,
+    publicDashboardFolders,
     certificates,
     publicLinksNoPassword,
     objectsPublicExternal,

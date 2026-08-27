@@ -124,6 +124,28 @@ export interface ExternalClientApp {
   requiredSessionLevel?: string;
 }
 
+/**
+ * A profile that overrides the org-wide session or password policy. These
+ * components exist only when a profile deviates from the org default, so an
+ * absent profile is inheriting the org settings checked by the `access.*` and
+ * `pwd.*` rules.
+ */
+export interface ProfilePolicyOverride {
+  profile: string;
+  /** Minutes of inactivity before logout. */
+  sessionTimeout?: number | null;
+  /** "STANDARD" | "HIGH_ASSURANCE" */
+  requiredSessionLevel?: string;
+  /** Days until passwords expire; 0 means never. */
+  passwordExpiration?: number | null;
+  /** 0 = no restriction, 1 = alphanumeric, 2+ = stronger character classes. */
+  passwordComplexity?: number | null;
+  /** 1 = hint answer cannot contain the password, 0 = unrestricted. */
+  passwordQuestion?: number | null;
+  /** Lockout duration in minutes. */
+  lockoutInterval?: number | null;
+}
+
 /** An org certificate / key pair used for signing, mTLS or SSO. */
 export interface OrgCertificate {
   name: string;
@@ -156,6 +178,12 @@ export interface OrgSnapshot {
   connectedApps: ConnectedApp[];
   /** External Client Apps (the Connected App successor). */
   externalClientApps: ExternalClientApp[];
+  /** Profiles overriding the org-wide session or password policy. */
+  profilePolicies: ProfilePolicyOverride[];
+  /** Report folders whose access type is Public (visible to all users). */
+  publicReportFolders: string[];
+  /** Dashboard folders whose access type is Public. */
+  publicDashboardFolders: string[];
   /** Org certificates and key pairs, for the Key Management domain. */
   certificates: OrgCertificate[];
   /** Public content-distribution links missing a password. */

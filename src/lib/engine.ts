@@ -15,6 +15,21 @@ function compare(actual: number | boolean | string, op: Op, expected: number | b
 }
 
 /**
+ * Permission-count metrics the snapshot populates, for the custom-rule builder.
+ * Mirrors PERMISSION_FIELDS (plus the object-level joins) in the scan backend.
+ */
+export const AVAILABLE_METRICS = [
+  "ViewAllData",
+  "ModifyAllData",
+  "ManageUsers",
+  "BulkApiHardDelete",
+  "WeeklyDataExport",
+  "ViewPII",
+  "ViewAllCustomSettings",
+  "DeleteAccounts",
+] as const;
+
+/**
  * Every list name `resolveList` understands, in display order. Exported so the
  * custom-rule builder advertises exactly what the engine can resolve — keep this
  * in step with the switch below.
@@ -49,6 +64,14 @@ export const AVAILABLE_LISTS = [
   "ecaNonExpiringRefresh",
   "ecaLongRefreshValidity",
   "ecaStandardSessionLevel",
+  "profilesPasswordNeverExpires",
+  "profilesPasswordExpiryTooLong",
+  "profilesLongSessionTimeout",
+  "profilesWeakPasswordComplexity",
+  "profilesUnrestrictedPasswordHint",
+  "profilesShortLockout",
+  "publicReportFolders",
+  "publicDashboardFolders",
   "objectsPublicExternal",
   "publicLinksNoPassword",
   "guestSharingRules",
@@ -129,6 +152,30 @@ function resolveList(snap: OrgSnapshot, key: string): string[] {
       return snap.externalClientApps
         .filter((a) => a.requiredSessionLevel !== undefined && a.requiredSessionLevel !== "HIGH_ASSURANCE")
         .map((a) => a.name);
+    case "profilesPasswordNeverExpires":
+      return snap.profilePolicies.filter((p) => p.passwordExpiration === 0).map((p) => p.profile);
+    case "profilesPasswordExpiryTooLong":
+      return snap.profilePolicies
+        .filter((p) => p.passwordExpiration != null && p.passwordExpiration > 90)
+        .map((p) => p.profile);
+    case "profilesLongSessionTimeout":
+      return snap.profilePolicies
+        .filter((p) => p.sessionTimeout != null && p.sessionTimeout > 120)
+        .map((p) => p.profile);
+    case "profilesWeakPasswordComplexity":
+      return snap.profilePolicies
+        .filter((p) => p.passwordComplexity != null && p.passwordComplexity < 2)
+        .map((p) => p.profile);
+    case "profilesUnrestrictedPasswordHint":
+      return snap.profilePolicies.filter((p) => p.passwordQuestion === 0).map((p) => p.profile);
+    case "profilesShortLockout":
+      return snap.profilePolicies
+        .filter((p) => p.lockoutInterval != null && p.lockoutInterval < 15)
+        .map((p) => p.profile);
+    case "publicReportFolders":
+      return snap.publicReportFolders;
+    case "publicDashboardFolders":
+      return snap.publicDashboardFolders;
     case "objectsPublicExternal":
       return snap.objectsPublicExternal;
     case "publicLinksNoPassword":
