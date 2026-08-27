@@ -1,8 +1,8 @@
-// Exports findings as a Falcon-Shield-parity CSV (identical 27-column schema) so the
-// output is a drop-in replacement for the reference report.
+// Exports findings as a CSV matching the Falcon Shield reference report through
+// column S (Check ID). The framework and benchmark columns that followed are
+// omitted; per-rule compliance mappings still live on each rule.
 
 import type { Finding, OrgSnapshot } from "../types";
-import { FRAMEWORKS } from "../types";
 import { todayLabel } from "./format";
 
 const COLUMNS = [
@@ -10,9 +10,6 @@ const COLUMNS = [
   "Security check", "Description", "Info", "Remediation", "Status change date",
   "Business Owner", "Organization Domain", "ticket", "Creation Time", "Last Run",
   "Tags", "Check ID",
-  ...FRAMEWORKS.map((f) => f.column),
-  "Salesforce Guest User Security Policy Best Practices",
-  "Falcon Shield SaaS NHI Benchmark",
 ];
 
 function esc(v: string): string {
@@ -44,12 +41,7 @@ export function toReportRows(findings: Finding[], snap: OrgSnapshot): string[][]
       "Last Run": now,
       Tags: (r.tags ?? []).join("; "),
       "Check ID": r.id,
-      "Salesforce Guest User Security Policy Best Practices": (r.tags ?? []).includes("guest") ? "Applicable" : "",
-      "Falcon Shield SaaS NHI Benchmark": (r.tags ?? []).includes("nhi") ? "Applicable" : "",
     };
-    for (const fw of FRAMEWORKS) {
-      row[fw.column] = (r.compliance[fw.key] ?? []).join(" ; ");
-    }
     return COLUMNS.map((c) => row[c] ?? "");
   });
 }

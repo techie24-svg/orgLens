@@ -205,4 +205,5 @@ days relative to scan time, so results shift as certificates age.
   the posture score, then extend with the SOQL/metadata checks it doesn't cover.
 - Threshold defaults above match the reference report; all are per-rule editable so a
   client can tighten/loosen them.
-- Each rule carries its compliance tags so the export can pivot findings by framework.
+- Each rule carries its compliance control IDs; these show in the finding detail but are
+  no longer emitted as CSV columns.
