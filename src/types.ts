@@ -98,6 +98,32 @@ export interface ConnectedApp {
   callbackUrl?: string;
 }
 
+/**
+ * An External Client App — the successor to Connected Apps. Its OAuth config is
+ * split across ExtlClntAppGlobalOauthSettings (credential handling) and
+ * ExtlClntAppOauthConfigurablePolicies (runtime policy); this is the merged view.
+ */
+export interface ExternalClientApp {
+  name: string;
+  pkceRequired?: boolean;
+  refreshTokenRotation?: boolean;
+  secretRequiredForRefresh?: boolean;
+  consumerSecretOptional?: boolean;
+  introspectAllTokens?: boolean;
+  callbackUrl?: string;
+  ipRelaxation?: "ENFORCE" | "RELAX";
+  clientCredentialsEnabled?: boolean;
+  tokenExchangeEnabled?: boolean;
+  /** "AdminApprovedPreAuthorized" | "AllSelfAuthorized" */
+  permittedUsers?: string;
+  /** "Infinite" | "SpecificInactivity" | "SpecificLifetime" | "Zero" */
+  refreshTokenPolicy?: string;
+  /** Validity normalized to days, regardless of the unit the org stored. */
+  refreshTokenValidityDays?: number | null;
+  /** "STANDARD" | "HIGH_ASSURANCE" */
+  requiredSessionLevel?: string;
+}
+
 /** An org certificate / key pair used for signing, mTLS or SSO. */
 export interface OrgCertificate {
   name: string;
@@ -128,6 +154,8 @@ export interface OrgSnapshot {
   /** Offending usernames per permission, for the Affected column. */
   permissionAffected: Record<string, string[]>;
   connectedApps: ConnectedApp[];
+  /** External Client Apps (the Connected App successor). */
+  externalClientApps: ExternalClientApp[];
   /** Org certificates and key pairs, for the Key Management domain. */
   certificates: OrgCertificate[];
   /** Public content-distribution links missing a password. */

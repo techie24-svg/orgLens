@@ -36,6 +36,19 @@ export const AVAILABLE_LISTS = [
   "certsWeakKey",
   "certsSelfSigned",
   "certsExportableKey",
+  "ecaNoPkce",
+  "ecaNoRefreshRotation",
+  "ecaRefreshNoSecret",
+  "ecaPublicClient",
+  "ecaIntrospectAll",
+  "ecaInsecureCallback",
+  "ecaIpRelax",
+  "ecaClientCredentials",
+  "ecaTokenExchange",
+  "ecaSelfAuthorized",
+  "ecaNonExpiringRefresh",
+  "ecaLongRefreshValidity",
+  "ecaStandardSessionLevel",
   "objectsPublicExternal",
   "publicLinksNoPassword",
   "guestSharingRules",
@@ -80,6 +93,42 @@ function resolveList(snap: OrgSnapshot, key: string): string[] {
       return snap.certificates.filter((c) => !c.caSigned).map((c) => c.name);
     case "certsExportableKey":
       return snap.certificates.filter((c) => c.privateKeyExportable).map((c) => c.name);
+    case "ecaNoPkce":
+      return snap.externalClientApps.filter((a) => a.pkceRequired === false).map((a) => a.name);
+    case "ecaNoRefreshRotation":
+      return snap.externalClientApps.filter((a) => a.refreshTokenRotation === false).map((a) => a.name);
+    case "ecaRefreshNoSecret":
+      return snap.externalClientApps.filter((a) => a.secretRequiredForRefresh === false).map((a) => a.name);
+    case "ecaPublicClient":
+      return snap.externalClientApps.filter((a) => a.consumerSecretOptional).map((a) => a.name);
+    case "ecaIntrospectAll":
+      return snap.externalClientApps.filter((a) => a.introspectAllTokens).map((a) => a.name);
+    case "ecaInsecureCallback":
+      return snap.externalClientApps
+        .filter((a) => a.callbackUrl && /^http:\/\/(?!localhost|127\.0\.0\.1)/i.test(a.callbackUrl))
+        .map((a) => a.name);
+    case "ecaIpRelax":
+      return snap.externalClientApps.filter((a) => a.ipRelaxation === "RELAX").map((a) => a.name);
+    case "ecaClientCredentials":
+      return snap.externalClientApps.filter((a) => a.clientCredentialsEnabled).map((a) => a.name);
+    case "ecaTokenExchange":
+      return snap.externalClientApps.filter((a) => a.tokenExchangeEnabled).map((a) => a.name);
+    case "ecaSelfAuthorized":
+      return snap.externalClientApps
+        .filter((a) => a.permittedUsers === "AllSelfAuthorized")
+        .map((a) => a.name);
+    case "ecaNonExpiringRefresh":
+      return snap.externalClientApps
+        .filter((a) => (a.refreshTokenPolicy ?? "").toLowerCase() === "infinite")
+        .map((a) => a.name);
+    case "ecaLongRefreshValidity":
+      return snap.externalClientApps
+        .filter((a) => a.refreshTokenValidityDays != null && a.refreshTokenValidityDays > 365)
+        .map((a) => a.name);
+    case "ecaStandardSessionLevel":
+      return snap.externalClientApps
+        .filter((a) => a.requiredSessionLevel !== undefined && a.requiredSessionLevel !== "HIGH_ASSURANCE")
+        .map((a) => a.name);
     case "objectsPublicExternal":
       return snap.objectsPublicExternal;
     case "publicLinksNoPassword":

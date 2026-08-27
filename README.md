@@ -8,9 +8,10 @@ compliance frameworks, and exports a Falcon-Shield-parity report.
 
 ## Highlights
 
-- **84 built-in checks** across 11 domains (Access Control, Connected Apps, Permissions,
-  Data Leakage, Malware Protection, Password Management, Key Management, MFA,
-  Secure Baseline, Auditing, Privacy), seeded from a real Falcon Shield report.
+- **97 built-in checks** across 12 domains (Access Control, Connected Apps, External
+  Client Apps, Permissions, Data Leakage, Malware Protection, Password Management,
+  Key Management, MFA, Secure Baseline, Auditing, Privacy), seeded from a real
+  Falcon Shield report.
 - **Declarative rule engine** — three check kinds (`setting`, `count`, `listEmpty`).
   Add your own checks as JSON in the UI; they're evaluated live, no code change.
 - **Six compliance frameworks** — ISO 27001:2022, NIST 800-53 Rev.5, SOC 2 Type 2,
