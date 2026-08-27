@@ -129,6 +129,12 @@ table.tbl th {
   font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
   border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-elev);
 }
+table.tbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table.tbl th.sortable:hover { color: var(--text-dim); }
+table.tbl th.sorted { color: var(--text); }
+/* The caret holds its space at all times so sorting never shifts the header row. */
+.sort-caret { margin-left: 6px; font-size: 9px; opacity: 0.35; }
+table.tbl th.sorted .sort-caret { opacity: 1; color: var(--accent); }
 table.tbl td { padding: 11px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
 table.tbl tr.clickable { cursor: pointer; }
 table.tbl tr.clickable:hover td { background: var(--bg-elev2); }
